@@ -9,7 +9,7 @@ class BatchData:
     for loading intermediate style represenetations'''
     def __init__(self,list_of_batches):
         self.i=0
-        self.list_of_batches=list_of_batches
+        self.list_of_batches= [b for b in list_of_batches if len(b)>0]
 
     def __iter__(self):
         return self
@@ -25,6 +25,9 @@ class BatchData:
     def __len__(self):
         return len(self.list_of_batches)
 
+    def reset(self):
+        self.i=0
+
 class ImageBatchData:
     '''
     '''
@@ -33,7 +36,8 @@ class ImageBatchData:
 
 def get_all_img_paths(block):
     ret=[]
-    styles=os.listdir('{}/{}'.format(npz_root,block))
+    styles=[s for s in os.listdir('{}/{}'.format(npz_root,block)) if s[0]!='.']
+    print(styles)
     for style in styles:
         imgs=os.listdir('{}/{}/{}'.format(npz_root,block,style))
         for i in imgs:
@@ -67,10 +71,11 @@ def imposter():
             print(img,features.shape)
             bad.append(img)
     print(len(bad))
-    with open('badboys.sh','w+') as file:
-        for img in bad:
-            img_name=img[img.rfind('/')+1:]
-            file.write('rm {}\n'.format(img_name))
+    for img in bad:
+        splits=img.split('/')
+        with open('{}/{}/{}/badboys.sh'.format(npz_root,block1_conv1,splits[2]),'a+') as file:
+            file.write('find . -name  \'{}\' -delete\n'.format(splits[3]))
+            file.write('rm {}\n'.format(splits[3]))
 
 
 if __name__ =='__main__':

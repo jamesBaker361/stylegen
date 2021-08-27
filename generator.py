@@ -3,10 +3,13 @@ import tensorflow.keras as tk
 from tensorflow.keras import layers,Model
 import string
 
+from tensorflow.python.keras.activations import sigmoid
+
 from group_norm import GroupNormalization
 from resnext import ResNextBlock
 
 from data_processing import vgg_layers
+from rescaling import Rescaling
 
 from other_globals import *
 
@@ -130,7 +133,10 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
         x = layers.Conv2DTranspose(channels, (1, 1), (2, 2))(x)
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)
     x = tk.activations.swish(x)
-    x = layers.Conv2D(3, (1, 1), (1, 1),name='img_output')(x)
+    x = layers.Conv2D(3, (1, 1), (1, 1))(x)
+    x=layers.Activation('sigmoid')(x)
+    x=Rescaling(255,name='img_output')(x)
+    x=tk.applications.vgg19.preprocess_input(x)
     vgg=vgg_layers([block1_conv1])
     x=vgg(x)
     return Model(inputs=inputs, outputs=[x])
