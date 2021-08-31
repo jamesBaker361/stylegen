@@ -111,12 +111,18 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
     # encoder
     inputs = tk.Input(shape=noise_dim)
     # too computationally expensive to generate a bunch of tensors 256,256,3
-    x = layers.UpSampling2D(size=(8, 8))(inputs)
+    x=layers.Conv2DTranspose(3,(8,8),(8,8),padding='same')(inputs)
     x = layers.Conv2D(32, (1, 1), (1, 1))(x)
+    x=layers.BatchNormalization()(x)
+    x=layers.Dropout(.2)(x)
+    x=layers.LeakyReLU()(x)
     for _ in range(m):
         channels = x.shape[-1] *2
         x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
+        x=layers.BatchNormalization()(x)
+        x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
     x = ResNextBlock(kernel_size=(4, 4))(x)
     x = attn_block(x)
     x = ResNextBlock(kernel_size=(4, 4))(x)
@@ -131,6 +137,9 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
         channels = x.shape[-1]/2
         x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2DTranspose(channels, (1, 1), (2, 2))(x)
+        x=layers.BatchNormalization()(x)
+        x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)
     x = tk.activations.swish(x)
     x = layers.Conv2D(3, (1, 1), (1, 1))(x)
@@ -142,6 +151,10 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
     return Model(inputs=inputs, outputs=[x])
 
 
+def bs_gen():
+    inputs = tk.Input(shape=noise_dim_vqgan)
+    x=layers.Conv2DTranspose(3,(8,8),(8,8),padding='same')(inputs)
+    return Model(inputs=inputs, outputs=[x])
+
 if __name__=='__main__':
-    vgg=vgg_layers([block1_conv1])
-    vgg.summary()
+    bs_gen().summary()

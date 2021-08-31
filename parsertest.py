@@ -2,7 +2,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 
-parser.add_argument('--foo', help='foo help',type=int)
+parser.add_argument('--foo', help='foo help',type=str)
 
 args = parser.parse_args()
 

@@ -34,8 +34,10 @@ NAME='v1'
 cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 def discriminator_loss(real_output, fake_output):
-    real_loss = cross_entropy(tf.ones_like(real_output), real_output)
-    fake_loss = cross_entropy(tf.zeros_like(fake_output), fake_output)
+    real_vector=tf.ones_like(real_output)+tf.random.normal(shape=real_output.shape,mean=0,stddev=.05)
+    fake_vector=tf.zeros_like(fake_output)+tf.random.normal(shape=fake_output.shape,mean=.15,stddev=.05)
+    real_loss = cross_entropy(real_vector, real_output)
+    fake_loss = cross_entropy(fake_vector, fake_output)
     total_loss = real_loss + fake_loss
     return total_loss
 
@@ -53,7 +55,7 @@ disc=conv_discrim()
 #@tf.function
 def train_step(images,gen_training=True,disc_training=True):
     batch_size=images.shape[0]
-    noise = tf.random.uniform([batch_size, *noise_dim_vqgan],0,255,dtype=tf.int32)
+    noise = tf.random.normal([batch_size, *noise_dim_vqgan])
     #noise = tf.random.normal([batch_size, *noise_dim_vqgan])
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         generated_images = gen(noise, training=gen_training)
@@ -125,8 +127,8 @@ def train(dataset,epochs=EPOCHS,picture=True,pre_train_epochs=PRE_EPOCHS,name=NA
                 os.makedirs(save_dir)
             disc.save_weights(save_dir)
         if picture is True:
-            noise = tf.random.uniform([1, *noise_dim_vqgan],0,255,dtype=tf.int32)
-            gen_img=255*intermediate_model(noise).numpy()
+            noise = tf.random.normal([1, *noise_dim_vqgan])
+            gen_img=intermediate_model(noise).numpy()
             cv2.imwrite('./{}/{}/epoch_{}.jpg'.format(gen_img_dir,name,epoch),gen_img[0])
 
 if __name__=='__main__':
@@ -145,6 +147,7 @@ if __name__=='__main__':
     args = parser.parse_args()
 
     arg_vars=vars(args)
+    print(arg_vars)
     if batch_size_str in arg_vars:
         BATCH_SIZE=arg_vars[batch_size_str]
     if epochs_str in arg_vars:
@@ -156,4 +159,4 @@ if __name__=='__main__':
     if arg_vars[name_str] is not None:
         NAME=arg_vars[name_str]
     dataset=get_dataset(block1_conv1,BATCH_SIZE,LIMIT)
-    train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS)
+    train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
