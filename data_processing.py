@@ -66,7 +66,7 @@ def get_img_paths(artistic_styles=[]):
     return all_imgs
 
 def main():
-    artistic_styles=['romanticism']
+    artistic_styles=['expressionism']
     count=len(get_img_paths(artistic_styles))
     c=0
     style_layers = ['block1_conv1'] #,'block2_conv1']
