@@ -1,3 +1,4 @@
+print('hello world myy name is '.format(__name__))
 
 import os
 from tensorflow.python.keras.models import Model
@@ -20,16 +21,20 @@ from string_globals import *
 from other_globals import *
 
 
-from generator import vqgan,noise_dim_vqgan
+from generator import vqgan,noise_dim_dcgan,noise_dim_vqgan,dcgen
+
+noise_dim=noise_dim_dcgan
 from discriminator import conv_discrim
 
 from data_loader import get_dataset
+from timeit import default_timer as timer
 
 EPOCHS=50
 BATCH_SIZE=16
 LIMIT=5000
 PRE_EPOCHS=0
 NAME='v1'
+USE_GPU=False
 
 cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
@@ -55,8 +60,8 @@ disc=conv_discrim()
 #@tf.function
 def train_step(images,gen_training=True,disc_training=True):
     batch_size=images.shape[0]
-    noise = tf.random.normal([batch_size, *noise_dim_vqgan])
-    #noise = tf.random.normal([batch_size, *noise_dim_vqgan])
+    noise = tf.random.normal([batch_size, *noise_dim])
+    #noise = tf.random.normal([batch_size, *noise_dim])
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         generated_images = gen(noise, training=gen_training)
 
@@ -127,7 +132,7 @@ def train(dataset,epochs=EPOCHS,picture=True,pre_train_epochs=PRE_EPOCHS,name=NA
                 os.makedirs(save_dir)
             disc.save_weights(save_dir)
         if picture is True:
-            noise = tf.random.normal([1, *noise_dim_vqgan])
+            noise = tf.random.normal([1, *noise_dim])
             gen_img=intermediate_model(noise).numpy()
             cv2.imwrite('./{}/{}/epoch_{}.jpg'.format(gen_img_dir,name,epoch),gen_img[0])
 
@@ -138,6 +143,7 @@ if __name__=='__main__':
     pretrain_epochs_str='pretrain_epochs'
     limit_str='limit'
     name_str='name'
+    gpu_str='gpu'
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
     parser.add_argument('--{}'.format(batch_size_str),help='batch size',type=int)
@@ -148,15 +154,19 @@ if __name__=='__main__':
 
     arg_vars=vars(args)
     print(arg_vars)
-    if batch_size_str in arg_vars:
+    if arg_vars[batch_size_str] is not None:
         BATCH_SIZE=arg_vars[batch_size_str]
-    if epochs_str in arg_vars:
+    if arg_vars[epochs_str] is not None:
         EPOCHS=arg_vars[epochs_str]
-    if limit_str in arg_vars:
+    if arg_vars[limit_str] is not None:
         LIMIT=arg_vars[limit_str]
-    if pretrain_epochs_str in arg_vars and arg_vars[pretrain_epochs_str] is not None:
+    if arg_vars[pretrain_epochs_str] is not None:
         PRE_EPOCHS=arg_vars[pretrain_epochs_str]
     if arg_vars[name_str] is not None:
         NAME=arg_vars[name_str]
     dataset=get_dataset(block1_conv1,BATCH_SIZE,LIMIT)
+    print('main loop')
+    start=timer()
     train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
+    end=timer()
+    print('gpu = {} time elapsed {}'.format(USE_GPU,end-start))

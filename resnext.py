@@ -22,8 +22,8 @@ class SplitBlock(layers.Layer):
 
 
 class ResNextBlock(layers.Layer):
-    def __init__(self, hidden_dim=4, kernel_size=(3, 3)):
-        super(ResNextBlock, self).__init__(name='')
+    def __init__(self, hidden_dim=4, kernel_size=(3, 3),**kwargs):
+        super(ResNextBlock, self).__init__(**kwargs)
         self.hidden_dim = hidden_dim
         self.kernel_size = kernel_size
         self.splits = []

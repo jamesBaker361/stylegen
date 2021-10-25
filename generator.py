@@ -15,7 +15,8 @@ from other_globals import *
 
 # https://github.com/hojonathanho/diffusion/blob/master/diffusion_tf/models/unet.py
 
-noise_dim_vqgan = (32, 32, 3)
+noise_dim_vqgen = (256,256,3)
+noise_dim_dcgan=(256,256,3)
 
 
 def _einsum(a, b, c, x, y):
@@ -94,7 +95,7 @@ def attn_block(x):
     return x + h
 
 
-def vqgan(noise_dim=noise_dim_vqgan,m=3):
+def vqgen(block,m=4):
     '''
     Parameters
     ----------
@@ -106,13 +107,11 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
     -------
     model -- tk.Model. generator to generate images of shape = (256,256,3)
     '''
-    output_shape=input_shape_dict[block1_conv1] #(256,256,64)
+    noise_dim=image_dim
     H,W,C=noise_dim
     # encoder
     inputs = tk.Input(shape=noise_dim)
-    # too computationally expensive to generate a bunch of tensors 256,256,3
-    x=layers.Conv2DTranspose(3,(8,8),(8,8),padding='same')(inputs)
-    x = layers.Conv2D(32, (1, 1), (1, 1))(x)
+    x = layers.Conv2D(32, (1, 1), (1, 1))(inputs)
     x=layers.BatchNormalization()(x)
     x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
@@ -130,11 +129,11 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
     x = tk.activations.swish(x)
 
     # decoder
-    x = ResNextBlock(kernel_size=(4, 4))(x)
+    x = ResNextBlock(kernel_size=(4, 4),name='decoder_input')(x)
     x = attn_block(x)
     x = ResNextBlock(kernel_size=(4, 4))(x)
     for _ in range(m):
-        channels = x.shape[-1]/2
+        channels = x.shape[-1]
         x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2DTranspose(channels, (1, 1), (2, 2))(x)
         x=layers.BatchNormalization()(x)
@@ -145,16 +144,115 @@ def vqgan(noise_dim=noise_dim_vqgan,m=3):
     x = layers.Conv2D(3, (1, 1), (1, 1))(x)
     x=layers.Activation('sigmoid')(x)
     x=Rescaling(255,name='img_output')(x)
+    if block==no_block:
+        return Model(inputs=inputs, outputs=x,name='vqgen')
     x=tk.applications.vgg19.preprocess_input(x)
-    vgg=vgg_layers([block1_conv1])
+    vgg=vgg_layers([block])
     x=vgg(x)
-    return Model(inputs=inputs, outputs=[x])
+    return Model(inputs=inputs, outputs=x,name='vqgen')
 
+def dcgen(block,m=4):
+    noise_dim=image_dim
+    inputs = tk.Input(shape=noise_dim)
+    x = layers.Conv2D(256, (1, 1), (1, 1))(inputs)
+    x=layers.BatchNormalization()(x)
+    x=layers.Dropout(.2)(x)
+    x=layers.LeakyReLU()(x)
+    '''
+    x=layers.Dense(4*4*1024,use_bias=False)(inputs)
+    x=layers.Reshape((4,4,1024))(x)
+    '''
+    for _ in range(m):
+        channels = x.shape[-1] // 2
+        x = ResNextBlock(kernel_size=(4, 4))(x)
+        x = layers.Conv2DTranspose(channels, (1, 1), (2, 2))(x)
+        x=layers.BatchNormalization()(x)
+        x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
 
-def bs_gen():
-    inputs = tk.Input(shape=noise_dim_vqgan)
-    x=layers.Conv2DTranspose(3,(8,8),(8,8),padding='same')(inputs)
-    return Model(inputs=inputs, outputs=[x])
+    for _ in range(m):
+        channels = x.shape[-1] *2
+        x = ResNextBlock(kernel_size=(4, 4))(x)
+        x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
+        x=layers.BatchNormalization()(x)
+        x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+
+    x = layers.Conv2D(3, (1, 1), (1, 1))(x)
+    x=layers.Activation('sigmoid')(x)
+    x=Rescaling(255,name='img_output')(x)
+    if block==no_block:
+        return Model(inputs=inputs, outputs=[x],name='dcgen')
+    x=tk.applications.vgg19.preprocess_input(x)
+    vgg=vgg_layers([block])
+    x=vgg(x)
+    return Model(inputs=inputs, outputs=[x],name='dcgen')
+
+def get_encoder(input_dim,name,m=3):
+    inputs = tk.Input(shape=input_dim)
+    x = layers.Conv2D(32, (1, 1), (1, 1))(inputs)
+    x=layers.BatchNormalization()(x)
+    x=layers.Dropout(.2)(x)
+    x=layers.LeakyReLU()(x)
+    for _ in range(m):
+        channels = x.shape[-1] *2
+        x = ResNextBlock(kernel_size=(4, 4))(x)
+        x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
+        x=layers.BatchNormalization()(x)
+        x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+    x = ResNextBlock(kernel_size=(4, 4))(x)
+    x = attn_block(x)
+    x = ResNextBlock(kernel_size=(4, 4))(x)
+    x = GroupNormalization()(x)
+    x = tk.activations.swish(x)
+    return Model(inputs=inputs, outputs=x,name=name)
+
+def get_decoder(block, input_dim,name):
+    inputs = tk.Input(shape=input_dim)
+    x = ResNextBlock(kernel_size=(4, 4),name='decoder_input')(inputs)
+    x = attn_block(x)
+    x = ResNextBlock(kernel_size=(4, 4))(x)
+    while x.shape[-2]<256:
+        channels = max(x.shape[-1]//2,32)
+        x = ResNextBlock(kernel_size=(4, 4))(x)
+        x = layers.Conv2DTranspose(channels, (4, 4), (2, 2),padding='same')(x)
+        x=layers.BatchNormalization()(x)
+        x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+    x = GroupNormalization(groups=x.shape[-1] // 4)(x)
+    x = tk.activations.swish(x)
+    x = layers.Conv2D(3, (1, 1), (1, 1))(x)
+    x=layers.Activation('sigmoid')(x)
+    x=Rescaling(255,name='img_output')(x)
+
+    '''x=tk.applications.vgg19.preprocess_input(x)
+    vgg=vgg_layers([block])
+    x=vgg(x)'''
+    return Model(inputs=inputs, outputs=x,name=name)
+
+def full_autoencoder(block):
+    input_shape=input_shape_dict[block]
+    inputs = tk.Input(shape=input_shape)
+    enc=get_encoder(input_shape,name='encoder'.format(block))
+    dec=get_decoder(block,enc.output_shape[1:],name='decoder'.format(block))
+    
+    x = enc(inputs)
+    x=dec(x)
+    return Model(inputs=inputs, outputs=x,name='autoencoder'.format(block))
+
+def aegen(block):
+    input_shape=input_shape_dict[block]
+    inputs = tk.Input(shape=input_shape)
+    autoencoder=full_autoencoder(block)
+    x=autoencoder(inputs)
+    if block==no_block:
+        return Model(inputs=inputs, outputs=x,name='aegen')
+    x=tk.applications.vgg19.preprocess_input(x)
+    vgg=vgg_layers([block])
+    x=vgg(x)
+    return Model(inputs=inputs, outputs=x,name='aegen')
 
 if __name__=='__main__':
-    bs_gen().summary()
+    block=block1_conv1
+    print(dcgen(block).input.shape)

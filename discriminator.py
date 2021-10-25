@@ -12,14 +12,17 @@ from other_globals import *
 
 input_shape=input_shape_dict[block1_conv1]
 
-def conv_discrim(input_shape=input_shape):
+def conv_discrim(block):
+    input_shape=input_shape_dict[block]
     inputs=layers.Input(shape=input_shape)
 
-    x= layers.Conv2D(input_shape[-1] //2,(4,4),(2,2),padding='same')(inputs)
+    conv1_dim=max(128, input_shape[-1] //2)
+    x= layers.Conv2D(conv1_dim,(4,4),(2,2),padding='same')(inputs)
     x=layers.BatchNormalization()(x)
     x=layers.LeakyReLU()(x)
 
     for _ in range(3):
+        x = ResNextBlock(kernel_size=(4, 4))(x)
         x= layers.Conv2D(x.shape[-1] //2,(4,4),(2,2),padding='same')(x)
         x=layers.BatchNormalization()(x)
         x=layers.LeakyReLU()(x)
@@ -30,5 +33,5 @@ def conv_discrim(input_shape=input_shape):
     return tk.Model(inputs=inputs, outputs=x)
 
 if __name__ =='__main__':
-    model=conv_discrim()
+    model=conv_discrim(no_block)
     model.summary()
