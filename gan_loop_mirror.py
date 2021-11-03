@@ -21,10 +21,10 @@ from timeit import default_timer as timer
 from keras.applications.inception_v3 import InceptionV3
 from fid_metric import calculate_fid
 
-EPOCHS=1 #how mnay epochs to train generator for
-AE_EPOCHS=1 #how many epochs to pre train autoencoder for
+EPOCHS=100 #how mnay epochs to train generator for
+AE_EPOCHS=20 #how many epochs to pre train autoencoder for
 BATCH_SIZE_PER_REPLICA=1
-LIMIT=100 #how many images in total dataset
+LIMIT=3500 #how many images in total dataset
 PRE_EPOCHS=1 #how many epochs to pretrain discriminator on
 NAME='testing'
 BLOCK=block1_conv1 #which block of vgg we care about
@@ -78,8 +78,6 @@ if __name__=='__main__':
             FID=False
     
     SHAPE=input_shape_dict[BLOCK]
-    art_styles=['realism']
-    print(BLOCK,SHAPE)
 
     physical_devices=tf.config.list_physical_devices('GPU')
     for device in physical_devices:
@@ -260,14 +258,29 @@ if __name__=='__main__':
                     os.makedirs(save_dir)
                 disc.save_weights(save_dir)
             if picture is True:
-                noise = tf.random.normal([1, * interm_noise_dim])
-                gen_img=intermediate_model(noise).numpy()
-                cv2.imwrite('./{}/{}/epoch_{}.jpg'.format(gen_img_dir,name,epoch),gen_img[0])
-    genres=all_genres
+                for suffix in ['i','ii','iii','iv']:
+                    print('suffix ',suffix)
+                    noise = tf.random.normal([1, * interm_noise_dim])
+                    gen_img=intermediate_model(noise).numpy()
+                    new_img_path='{}/epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
+                    print('writing ',new_img_path)
+                    tf.keras.utils.save_img(new_img_path,gen_img[0])
+                    print('the file exists == {}'.format(os.path.exists(new_img_path)))
+    genres=[2]
+    art_styles=[]
     dataset=get_dataset_gen(BLOCK,GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
     dataset=strategy.experimental_distribute_dataset(dataset)
     print('main loop')
-    #with strategy.scope():
+    print('genres ',genres)
+    print('styles ',art_styles)
+    print('epochs ',EPOCHS)
+    print('ae epochs ', AE_EPOCHS)
+    print('dataset size limit ',LIMIT)
+    print('discriminator pretraining epochs ',PRE_EPOCHS)
+    print('name ',NAME)
+    print('block ',BLOCK, SHAPE)
+    print('auto? ',AUTO)
+    print('test fid? ', FID)
     start=timer()
     train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
     end=timer()

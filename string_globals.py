@@ -11,4 +11,4 @@ block4_conv1='block4_conv1'
 block5_conv1='block5_conv1'
 block5_conv2='block5_conv2'
 checkpoint_dir='checkpoints' #where saved models are stored
-gen_img_dir='../../../../../scratch/jlb638/gen_imgs' #generated images
+gen_img_dir='./gen_imgs' #generated images

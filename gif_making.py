@@ -10,7 +10,7 @@ def make_gif(name):
     images = []
     for filename in filenames:
         images.append(imageio.imread(filename))
-    imageio.mimsave('{}/movie.gif'.format(target_dir), images,duration=len(images)*.02)
+    imageio.mimsave('{}/movie.gif'.format(target_dir), images,duration=len(images)*.002)
 
 if __name__ =='__main__': #pass name ae, dcgen, etc, whatever the name of the folder is as arg
     cl_args=sys.argv[1:]
