@@ -1,19 +1,20 @@
 print('hello world myy name is '.format(__name__))
 import os
 from tensorflow.python.keras.models import Model
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
+
+
 import tensorflow as tf
 #tf.config.run_functions_eagerly(True)
 
 import argparse
 import cv2
+from helpers import get_checkpoint_paths
 from string_globals import *
 from other_globals import *
 import numpy as np
 
-
 from generator import vqgen,noise_dim_dcgan,noise_dim_vqgen,dcgen
-from autoencoders import aegen
+from autoencoderscopy import aegen,extract_generator
 
 noise_dim=noise_dim_dcgan
 from discriminator import conv_discrim
@@ -22,18 +23,24 @@ from data_loader import get_dataset_gen, get_dataset_gen_slow,get_real_imgs_fid
 from timeit import default_timer as timer
 from keras.applications.inception_v3 import InceptionV3
 from fid_metric import calculate_fid
-from graph_loss import line_graph
+from graph_loss import data_to_csv
+from gif_making import *
+from helpers import *
+from transfer import *
 
-EPOCHS=50 #how mnay epochs to train generator for
+EPOCHS=75 #how mnay epochs to train generator and discriminator for
 AE_EPOCHS=50 #how many epochs to pre train autoencoder for
-BATCH_SIZE_PER_REPLICA=1
-LIMIT=10000 #how many images in total dataset
+BATCH_SIZE_PER_REPLICA=1 #batch size per gpu
+LIMIT=80000 #how many images in total dataset
 PRE_EPOCHS=1 #how many epochs to pretrain discriminator on
 NAME='testing'
 BLOCK=block1_conv1 #which block of vgg we care about
 AUTO=True #whether to use autoencoder generator
 FID=False #whether to calculate FID score after each epoch
 GRAPH_LOSS=True #whether to graph loss of models over time
+FLAT=False #whether to use flat latent or weirdly shaped latent space
+HALF=False #whether to just use half the dataset
+NO_LOAD=False #whether to load pretrained models 
 
 
 
@@ -48,6 +55,12 @@ if __name__=='__main__':
     block_str='block'
     auto_str='auto'
     fid_str='fid'
+    human_str='human'
+    baroque_str='baroque'
+    renn_str='renn'
+    flat_str='flat'
+    half_str='half'
+    no_load_str='no_load'
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
     parser.add_argument('--{}'.format(batch_size_replica_str),help='batch size',type=int)
@@ -56,6 +69,12 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(block_str),help='block of vgg we are trying to imitate',type=str)
     parser.add_argument('--{}'.format(auto_str),help='whetther to use an autoencoder GAN',type=bool)
     parser.add_argument('--{}'.format(fid_str),help='whether to calculate fid score after each epoch',type=str)
+    parser.add_argument('--{}'.format(human_str),help='only using the human art',type=bool)
+    parser.add_argument('--{}'.format(baroque_str),help='only using baroque and romantic styles',type=bool)
+    parser.add_argument('--{}'.format(renn_str),help='only using rennaissance styles')
+    parser.add_argument('--{}'.format(flat_str),help='flat latent space for noise',type=bool)
+    parser.add_argument('--{}'.format(half_str),help='whether to only use half the whole dataset for speed purposes',type=bool)
+    parser.add_argument('--{}'.format(no_load_str),help='whether to load past pretrained versions',type=bool)
 
     args = parser.parse_args()
 
@@ -80,12 +99,19 @@ if __name__=='__main__':
             FID=True
         elif arg_vars[fid_str] in set(['false','False']):
             FID=False
+    if arg_vars[flat_str] is not None:
+        FLAT=arg_vars[flat_str]
+    if arg_vars[half_str] is not None:
+        LIMIT=LIMIT//2
+    if arg_vars[no_load_str] is not None:
+        NO_LOAD=True
     
     SHAPE=input_shape_dict[BLOCK]
 
     physical_devices=tf.config.list_physical_devices('GPU')
     for device in physical_devices:
-        tf.config.experimental.set_memory_growth(device,True)
+        continue
+        #tf.config.experimental.set_memory_growth(device,True)
 
     gpus = tf.config.list_logical_devices('GPU')
     
@@ -117,16 +143,25 @@ if __name__=='__main__':
             loss=[tf.reduce_mean(tf.square(tf.subtract(images, generated_images)))]
             return tf.nn.compute_average_loss(loss,global_batch_size=GLOBAL_BATCH_SIZE)
 
-        generator_optimizer = tf.keras.optimizers.Adam(1e-2)
+        initial_learning_rate = 0.01
+        decay_steps = 1000
+        decay_rate = 0.9
+        learning_rate_fn = tf.keras.optimizers.schedules.InverseTimeDecay(initial_learning_rate, decay_steps, decay_rate)
+
+        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate_fn)
+        generator_optimizer = tf.keras.optimizers.Adam(learning_rate_fn)
         discriminator_optimizer = tf.keras.optimizers.SGD()
 
-        autoenc=aegen(BLOCK,False)
-        gen=autoenc
+        output_blocks=[BLOCK]
+        autoenc=aegen(BLOCK,FLAT,output_blocks)
+        gen=extract_generator(autoenc,BLOCK,output_blocks)
         disc=conv_discrim(BLOCK)
 
         noise_dim=gen.input.shape
-        if len(noise_dim)>3:
+        if len(noise_dim)!=3:
             noise_dim=noise_dim[1:]
+        print('noise_dim',noise_dim)
+        print('[1, * noise_dim]',[1, * noise_dim])
 
     def train_step(images,gen_training,disc_training):
         """A single step to train the generator and discriminator
@@ -138,10 +173,11 @@ if __name__=='__main__':
 
         """
         batch_size=images.shape[0]
-        noise = tf.random.normal([batch_size, * noise_dim])
+        noise = tf.random.uniform([batch_size, * noise_dim])
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_images = gen(noise, training=gen_training)
-
+            if type(generated_images)==list:
+                generated_images=generated_images[0]
             real_output = disc(images, training=disc_training)
             fake_output = disc(generated_images, training=disc_training)
 
@@ -193,37 +229,48 @@ if __name__=='__main__':
         fid_func=calculate_fid(iv3_model)
 
     def train(dataset,epochs=EPOCHS,picture=True,ae_epochs=AE_EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,save_gen=True,save_disc=True):
+        check_dir_auto='./{}/{}/{}'.format(checkpoint_dir,name,'auto')
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
         check_dir_disc='./{}/{}/{}'.format(checkpoint_dir,name,'disc')
         picture_dir='./{}/{}'.format(gen_img_dir,name)
-        for d in [check_dir_gen,check_dir_disc,picture_dir]:
+        for d in [check_dir_gen,check_dir_disc,picture_dir,check_dir_auto]:
             if not os.path.exists(d):
                 os.makedirs(d)
         if AUTO==True:
             print('autoencoder training')
             avg_auto_loss=0.0
             avg_auto_loss_history=[]
-            for epoch in range(ae_epochs):
+            auto_ckpt_paths=get_checkpoint_paths(check_dir_auto)
+            start_epoch=0
+            if len(auto_ckpt_paths)>0 and NO_LOAD==False:
+                most_recent,start_epoch=get_ckpt_epoch_from_paths(auto_ckpt_paths)
+                autoenc.load_weights(most_recent+'/cp.ckpt')
+                print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
+            for epoch in range(start_epoch,ae_epochs,1):
                 for i,images in enumerate(dataset):
                     ae_loss=train_step_dist_ae(images)
-                    avg_auto_loss+=ae_loss
-                    if i%10==0:
+                    avg_auto_loss+=ae_loss/LIMIT
+                    if i%100==0:
                         print('\tbatch {} autoencoder loss {}'.format(i,ae_loss))
-                avg_auto_loss=avg_auto_loss/LIMIT
                 avg_auto_loss_history.append(avg_auto_loss)
                 print('epoch: {} ended with avg ae loss {}'.format(epoch,avg_auto_loss))
                 if GRAPH_LOSS==True:
-                    line_graph(name,'auto',avg_auto_loss_history)
+                    data_to_csv(name,'auto',avg_auto_loss_history)
+                save_dir=check_dir_auto+'/epoch_{}/'.format(epoch)
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                autoenc.save_weights(save_dir+'cp.ckpt')
         avg_disc_loss_history=[]
         avg_gen_loss_history=[]
-        if pre_train_epochs>0:
+        disc_ckpt_paths=get_checkpoint_paths(check_dir_disc)
+        if pre_train_epochs>0 and len(disc_ckpt_paths)==0:
             print('pretraining')
             for epoch in range(pre_train_epochs):
                 avg_disc_loss=0.0
                 for i,image_tuples in enumerate(dataset):
                     for images in image_tuples:
                         disc_loss,_=train_step_dist(images,gen_training=False,disc_training=True)
-                        if i % 10 == 0:
+                        if i % 100 == 0:
                             print('\tbatch {} disc loss {}'.format(i,disc_loss))
                         avg_disc_loss+=disc_loss/LIMIT
                 avg_disc_loss_history.append(avg_disc_loss)
@@ -235,19 +282,26 @@ if __name__=='__main__':
                     save_dir=check_dir_disc+'/pretrain_epoch_{}/'.format(epoch)
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
-                    disc.save_weights(save_dir)
+                    disc.save_weights(save_dir+'cp.ckpt')
         print('training')
         #the intermediate model is used to generate the images
-        if AUTO==True:
-            intermediate_model=gen.get_layer('autoencoder').get_layer('decoder')
-        else:
-            intermediate_model=Model(inputs=gen.input, outputs=gen.get_layer('img_output').output)
+        intermediate_model=gen.get_layer('decoder')
         interm_noise_dim=intermediate_model.input.shape
         if interm_noise_dim[0]==None:
             interm_noise_dim=interm_noise_dim[1:]
         print('interm_noise_dim ',interm_noise_dim)
         print('intermediate model loaded')
-        for epoch in range(epochs):
+        if len(disc_ckpt_paths)>0:
+            most_recent_disc,epoch_disc=get_ckpt_epoch_from_paths(disc_ckpt_paths)
+            disc.load_weights(most_recent_disc+'/cp.ckpt')
+            print('successfully loaded discriminator from epoch {}'.format(epoch_disc))
+        start_epoch_adverse=0
+        gen_ckpt_paths=get_checkpoint_paths(check_dir_gen)
+        if len(gen_ckpt_paths)>0 and NO_LOAD==False:
+            most_recent_gen,start_epoch_adverse=get_ckpt_epoch_from_paths(gen_ckpt_paths)
+            gen.load_weights(most_recent_gen+'/cp.ckpt')
+            print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
+        for epoch in range(start_epoch_adverse,epochs,1):
             gen_training=True
             disc_training=True
             avg_gen_loss=0.0
@@ -255,7 +309,7 @@ if __name__=='__main__':
             for i,image_tuples in enumerate(dataset):
                 for images in image_tuples: 
                     disc_loss,gen_loss=train_step_dist(images,gen_training,disc_training)
-                    if i%10==0:
+                    if i%100==0:
                         print('\tbatch {} disc_loss: {} gen loss: {}'.format(i,disc_loss,gen_loss))
                     if disc_loss <= 0.001:
                         disc_training=False
@@ -271,8 +325,8 @@ if __name__=='__main__':
             avg_gen_loss_history.append(avg_gen_loss)
             print('epoch: {} ended with disc_loss {} and gen loss {} after {} batches'.format(epoch,avg_disc_loss,avg_gen_loss,i))
             if GRAPH_LOSS == True:
-                line_graph(name,'generator',avg_gen_loss_history)
-                line_graph(name,'discriminator',avg_disc_loss_history)
+                data_to_csv(name,'generator',avg_gen_loss_history)
+                data_to_csv(name,'discriminator',avg_disc_loss_history)
             if FID == True:
                 fid_batch_size=1000
                 noise = tf.random.normal([fid_batch_size, * interm_noise_dim])
@@ -284,15 +338,15 @@ if __name__=='__main__':
                 save_dir=check_dir_gen+'/epoch_{}/'.format(epoch)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                gen.save_weights(save_dir)
+                gen.save_weights(save_dir+'cp.ckpt')
             if save_disc is True:
                 save_dir=check_dir_disc+'/epoch_{}/'.format(epoch)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                disc.save_weights(save_dir)
+                disc.save_weights(save_dir+'cp.ckpt')
             if picture is True: #creates a 3 x 3 collage of generated images
-                for suffix in ['i','ii','iii','iv']:
-                    print('suffix ',suffix)
+                for suffix in ['i','ii','iii']:
+                    '''
                     collage=[]
                     for x in range(3):
                         row=[]
@@ -302,13 +356,21 @@ if __name__=='__main__':
                             row.append(gen_img[0])
                         collage.append(cv2.hconcat(row))
                     gen_img_collage=cv2.vconcat(collage)
+                    '''
+                    noise = tf.random.uniform([1, *interm_noise_dim])
+                    gen_img=intermediate_model(noise).numpy()[0]
                     new_img_path='{}/epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
-                    print('writing ',new_img_path)
-                    cv2.imwrite(new_img_path,gen_img_collage)
+                    cv2.imwrite(new_img_path,gen_img)
                     print('the file exists == {}'.format(os.path.exists(new_img_path)))
-    genres=[1,7]
-    art_styles=[]
-    dataset=get_dataset_gen_slow([BLOCK],GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
+    genres=all_genres_art 
+    art_styles=all_styles
+    if arg_vars[human_str] is not None:
+        genres=[1,3,7,9] #lotta humans 
+    elif arg_vars[baroque_str] is not None:
+        art_styles=['baroque','romanticism']
+    elif arg_vars[renn_str] is not None:
+        art_styles=['early-renaissance','high-renaissance','mannerism-late-renaissance','northern-renaissance']
+    dataset=get_dataset_gen_slow(output_blocks,GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
     dataset=strategy.experimental_distribute_dataset(dataset)
     print('main loop')
     print('genres ',genres)
@@ -325,3 +387,6 @@ if __name__=='__main__':
     train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
     end=timer()
     print('time elapsed {}'.format(end-start))
+    make_big_gif(NAME)
+    print('made big gif')
+        

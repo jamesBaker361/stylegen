@@ -101,12 +101,13 @@ def aegen(block,flat_latent=False,output_blocks=[]):
     inputs = tk.Input(shape=input_shape)
     x=full_autoencoder(inputs,block,flat_latent)
     x=tk.applications.vgg19.preprocess_input(x)
-    output_blocks.append(block)
+    if output_blocks==[]:
+        output_blocks.append(block)
     vgg=vgg_layers(output_blocks)
     x=vgg(x)
     return Model(inputs=inputs, outputs=x,name='aegen')
 
-def extract_generator(model,output_blocks):
+def extract_generator(model,block,output_blocks):
     """gets the decoder part out of the generator and adds the vgg stuff
 
     Args:
@@ -117,16 +118,15 @@ def extract_generator(model,output_blocks):
     inputs=tk.Input(shape=decoder.input_shape[1:])
     x=decoder(inputs)
     x=tk.applications.vgg19.preprocess_input(x)
-    output_blocks.append(b)
+    if output_blocks==[]:
+        output_blocks.append(block)
     vgg=vgg_layers(output_blocks)
     x=vgg(x)
     return Model(inputs=inputs, outputs=x,name='generator')
 
 if __name__=='__main__':
-    for b in input_shape_dict.keys():
+    for block in input_shape_dict.keys():
         output_blocks=[]
-        model=aegen(b,output_blocks=output_blocks)
-        gen=extract_generator(model,output_blocks)
-        '''gen_outputs=model.outputs
-        generator=tk.Model(inputs=gen_inputs,outputs=gen_outputs)
-        generator.summary()'''
+        model=aegen(block,output_blocks=output_blocks)
+        print(block, model.output_shape)
+        gen=extract_generator(model,block,output_blocks)

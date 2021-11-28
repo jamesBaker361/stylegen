@@ -6,17 +6,23 @@ import numpy as np
 import cv2
 
 def make_gif(name):
-    print(name)
     target_dir='{}/{}'.format(gen_img_dir,name)
     filenames=[os.path.join(target_dir,f) for f in os.listdir(target_dir) if f.endswith('.jpg')]
+    if len(filenames)==0:
+        print('zero images in ',name)
+        return
     images = []
     for filename in filenames:
         images.append(imageio.imread(filename))
     imageio.mimsave('{}/movie.gif'.format(target_dir), images,duration=len(images)*.002)
+    print('successfully made gif for ',name)
 
 def make_big_gif(name):
     target_dir='{}/{}'.format(gen_img_dir,name)
     filenames=[os.path.join(target_dir,f) for f in os.listdir(target_dir) if f.endswith('.jpg')]
+    if len(filenames)<9:
+        make_gif(name)
+        return
     images = []
     for f in range(0,len(filenames)-9,9):
         collage=[]
@@ -33,5 +39,5 @@ def make_big_gif(name):
 if __name__ =='__main__': #pass name ae, dcgen, etc, whatever the name of the folder is as arg
     cl_args=sys.argv[1:]
     prefix=cl_args[0]
-    for name in [prefix+'{}'.format(i) for i in range(6)]:
-        make_big_gif(name)
+    for name in [prefix+'{}'.format(i) for i in all_blocks]:
+        make_gif(name)

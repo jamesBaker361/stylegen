@@ -64,7 +64,7 @@ def get_img_paths(artistic_styles=[]):
     return all_imgs
 
 def main(blocks):
-    artistic_styles= ['expressionism'] #['baroque','early-renaissance','high-renaissance','mannerism-late-renaissance','northern-renaissance','ukiyo-e','rococo','realism','contemporary-realism','color-field-painting']
+    artistic_styles= all_styles #['baroque','early-renaissance','high-renaissance','mannerism-late-renaissance','northern-renaissance','ukiyo-e','rococo','realism','contemporary-realism','color-field-painting']
     count=len(get_img_paths(artistic_styles))
     c=0
     style_layers = blocks #,'block2_conv1']
