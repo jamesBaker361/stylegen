@@ -4,6 +4,7 @@ from tensorflow.python.keras.models import Model
 
 
 import tensorflow as tf
+from tensorflow.errors import NotFoundError
 #tf.config.run_functions_eagerly(True)
 
 import argparse
@@ -110,12 +111,14 @@ if __name__=='__main__':
 
     physical_devices=tf.config.list_physical_devices('GPU')
     for device in physical_devices:
-        continue
-        #tf.config.experimental.set_memory_growth(device,True)
+        try:
+            tf.config.experimental.set_memory_growth(device,True)
+        except:
+            pass
 
-    gpus = tf.config.list_logical_devices('GPU')
+    logical_gpus = tf.config.list_logical_devices('GPU')
     
-    strategy = tf.distribute.MirroredStrategy(gpus)
+    strategy = tf.distribute.MirroredStrategy(logical_gpus)
 
     GLOBAL_BATCH_SIZE = BATCH_SIZE_PER_REPLICA * strategy.num_replicas_in_sync
     LIMIT=LIMIT-(LIMIT%GLOBAL_BATCH_SIZE)
@@ -244,8 +247,16 @@ if __name__=='__main__':
             start_epoch=0
             if len(auto_ckpt_paths)>0 and NO_LOAD==False:
                 most_recent,start_epoch=get_ckpt_epoch_from_paths(auto_ckpt_paths)
-                autoenc.load_weights(most_recent+'/cp.ckpt')
-                print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
+                while 'cp.ckpt.index' not in set(os.listdir(most_recent)):
+                    new_start_epoch=max(0,start_epoch-1)
+                    second_most_recent=most_recent[:most_recent.rfind('_')+1]+str(new_start_epoch)
+                    start_epoch=new_start_epoch
+                    most_recent=second_most_recent
+                    if start_epoch<=0:
+                        break
+                if start_epoch>0:
+                    autoenc.load_weights(most_recent+'/cp.ckpt')
+                    print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
             for epoch in range(start_epoch,ae_epochs,1):
                 for i,images in enumerate(dataset):
                     ae_loss=train_step_dist_ae(images)
@@ -292,15 +303,31 @@ if __name__=='__main__':
         print('interm_noise_dim ',interm_noise_dim)
         print('intermediate model loaded')
         if len(disc_ckpt_paths)>0:
-            most_recent_disc,epoch_disc=get_ckpt_epoch_from_paths(disc_ckpt_paths)
-            disc.load_weights(most_recent_disc+'/cp.ckpt')
-            print('successfully loaded discriminator from epoch {}'.format(epoch_disc))
+            most_recent_disc,start_epoch_disc=get_ckpt_epoch_from_paths(disc_ckpt_paths)
+            while 'cp.ckpt.index' not in set(os.listdir(most_recent_disc)):
+                new_start_epoch=max(0,start_epoch_disc-1)
+                second_most_recent=most_recent_disc[:most_recent_disc.rfind('_')+1]+str(new_start_epoch)
+                start_epoch_disc=new_start_epoch
+                most_recent_disc=second_most_recent
+                if start_epoch_disc<=0:
+                    break
+            if start_epoch_disc>0:
+                disc.load_weights(most_recent_disc+'/cp.ckpt')
+                print('successfully loaded discriminator from epoch {}'.format(start_epoch_disc))
         start_epoch_adverse=0
         gen_ckpt_paths=get_checkpoint_paths(check_dir_gen)
         if len(gen_ckpt_paths)>0 and NO_LOAD==False:
             most_recent_gen,start_epoch_adverse=get_ckpt_epoch_from_paths(gen_ckpt_paths)
-            gen.load_weights(most_recent_gen+'/cp.ckpt')
-            print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
+            while 'cp.ckpt.index' not in set(os.listdir(most_recent_gen)):
+                new_start_epoch=max(0,start_epoch_adverse-1)
+                second_most_recent=most_recent_gen[:most_recent_gen.rfind('_')+1]+str(start_epoch_adverse)
+                start_epoch_adverse=new_start_epoch
+                most_recent_gen=second_most_recent
+                if start_epoch_adverse<=0:
+                    break
+            if start_epoch_adverse>0:
+                gen.load_weights(most_recent_gen+'/cp.ckpt')
+                print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
         for epoch in range(start_epoch_adverse,epochs,1):
             gen_training=True
             disc_training=True
@@ -387,6 +414,6 @@ if __name__=='__main__':
     train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
     end=timer()
     print('time elapsed {}'.format(end-start))
-    make_big_gif(NAME)
+    make_big_gif(NAME) #will save a gif called collage_movie
     print('made big gif')
         

@@ -6,6 +6,14 @@ import os
 import csv
 
 def data_to_csv(name,model_type,data):
+    '''saves data to csv file, where each line is the loss for the epoch
+
+    Parameters
+    ----------
+    name -- str. name of model like "rennaissance_block1_conv1"
+    model_type. --str. type of model (auto, gen or disc)
+    data -- [int]. new data to be added to this csv file
+    '''
     save_dir='{}/{}'.format(graph_dir,name)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -15,6 +23,14 @@ def data_to_csv(name,model_type,data):
 
 
 def line_graph(name,model_type,data):
+    '''creates time series graph of data over time
+
+    Parameters
+    ----------
+    name -- str. name of model like "rennaissance_block1_conv1"
+    model_type. --str. type of model (auto, gen or disc)
+    data -- [int]. new data to be added to this csv file
+    '''
     x=[_ for _ in range(len(data))]
     plt.ylim(min(data),max(data))
     plt.plot(x,data)
