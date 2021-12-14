@@ -1,18 +1,17 @@
-print('hello world myy name is '.format(__name__))
 import os
-from tensorflow.python.keras.models import Model
 
 
 import tensorflow as tf
-from tensorflow.errors import NotFoundError
-#tf.config.run_functions_eagerly(True)
+print('tf version ='.format(tf. __version__))
+import sys
+print("Python version")
+print (sys.version)
 
 import argparse
 import cv2
 from helpers import get_checkpoint_paths
 from string_globals import *
 from other_globals import *
-import numpy as np
 
 from generator import vqgen,noise_dim_dcgan,noise_dim_vqgen,dcgen
 from autoencoderscopy import aegen,extract_generator
@@ -113,12 +112,13 @@ if __name__=='__main__':
     for device in physical_devices:
         try:
             tf.config.experimental.set_memory_growth(device,True)
-        except:
-            pass
+        except  RuntimeError as e:
+            print(e)
 
     logical_gpus = tf.config.list_logical_devices('GPU')
     
-    strategy = tf.distribute.MirroredStrategy(logical_gpus)
+    print('logical devices: {} physical devices: {}'.format(len(logical_gpus),len(physical_devices)))
+    strategy = tf.distribute.MirroredStrategy()
 
     GLOBAL_BATCH_SIZE = BATCH_SIZE_PER_REPLICA * strategy.num_replicas_in_sync
     LIMIT=LIMIT-(LIMIT%GLOBAL_BATCH_SIZE)
@@ -371,7 +371,7 @@ if __name__=='__main__':
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 disc.save_weights(save_dir+'cp.ckpt')
-            if picture is True: #creates a 3 x 3 collage of generated images
+            if picture is True: #creates a generated images
                 for suffix in ['i','ii','iii']:
                     '''
                     collage=[]

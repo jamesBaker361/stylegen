@@ -58,7 +58,7 @@ def nin(x, num_units, init_scale=1.0):
 
 class NinLayer(layers.Layer):
     def __init__(self, num_units, init_scale=1.0, **kwargs):
-        super(NinLayer, self).__init__(kwargs)
+        super(NinLayer, self).__init__(**kwargs)
         self.num_units = num_units
         self.w_init = default_init(init_scale)
         self.b_init = tk.initializers.Zeros()

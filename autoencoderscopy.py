@@ -16,7 +16,7 @@ from generator import *
 
 flat_latent_dim=64 #the dim of latent space is dim is 1-D
 
-def get_encoder(inputs,input_dim,name,flat_latent,m=3):
+def get_encoder(inputs,input_dim,name,flat_latent,residual,attention,m=3):
     #inputs = tk.Input(shape=input_dim)
     x = layers.Conv2D(max(8,input_dim[-1]), (1, 1), (1, 1))(inputs)
     x=layers.BatchNormalization()(x)
@@ -52,7 +52,7 @@ def get_encoder(inputs,input_dim,name,flat_latent,m=3):
         x=layers.Dense(flat_latent_dim)(x)
     return x
 
-def make_decoder(input_dim,name,flat_latent):
+def make_decoder(input_dim,name,flat_latent,residual,attention):
     inputs = tk.Input(shape=input_dim,name='decoder_input')
     if flat_latent==False:
         x=inputs
@@ -84,22 +84,22 @@ def make_decoder(input_dim,name,flat_latent):
     x=Rescaling(255,name='img_output')(x)
     return tk.Model(inputs=inputs,outputs=x,name='decoder')
 
-def full_autoencoder(inputs,block,flat_latent):
+def full_autoencoder(inputs,block,flat_latent,residual,attention,):
     input_shape=input_shape_dict[block]
     #inputs = tk.Input(shape=input_shape)
-    x=get_encoder(inputs,input_shape,'encoder'.format(block),flat_latent)
+    x=get_encoder(inputs,input_shape,'encoder'.format(block),flat_latent,residual,attention)
     #x=get_decoder(x,x.shape[1:],'decoder'.format(block),flat_latent)
-    dec=make_decoder(x.shape[1:],'decoder'.format(block),flat_latent)
+    dec=make_decoder(x.shape[1:],'decoder'.format(block),flat_latent,residual,attention)
     #x = enc(inputs)
     x=dec(x)
     return x
 
-def aegen(block,flat_latent=False,output_blocks=[]):
+def aegen(block,flat_latent=False,residual=True,attention=True,output_blocks=[]):
     '''makes autoencoder based generator
     '''
     input_shape=input_shape_dict[block]
     inputs = tk.Input(shape=input_shape)
-    x=full_autoencoder(inputs,block,flat_latent)
+    x=full_autoencoder(inputs,block,flat_latent,residual,attention)
     x=tk.applications.vgg19.preprocess_input(x)
     if output_blocks==[]:
         output_blocks.append(block)
