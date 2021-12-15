@@ -41,6 +41,8 @@ GRAPH_LOSS=True #whether to graph loss of models over time
 FLAT=False #whether to use flat latent or weirdly shaped latent space
 HALF=False #whether to just use half the dataset
 NO_LOAD=False #whether to load pretrained models 
+RESIDUAL=True #whether to use resnext layers in the AEGEN
+ATTENTION=True #whether to use attn block layers in the AEGEN
 
 
 
@@ -61,6 +63,8 @@ if __name__=='__main__':
     flat_str='flat'
     half_str='half'
     no_load_str='no_load'
+    no_attn_str='no_attn'
+    no_res_str='no_res'
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
     parser.add_argument('--{}'.format(batch_size_replica_str),help='batch size',type=int)
@@ -75,6 +79,8 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(flat_str),help='flat latent space for noise',type=bool)
     parser.add_argument('--{}'.format(half_str),help='whether to only use half the whole dataset for speed purposes',type=bool)
     parser.add_argument('--{}'.format(no_load_str),help='whether to load past pretrained versions',type=bool)
+    parser.add_argument('--{}'.format(no_attn_str),help='whether to not use attentional blocks or not',type=bool)
+    parser.add_argument('--{}'.format(no_res_str),help ='whether to not use resnext blocks',type=bool)
 
     args = parser.parse_args()
 
@@ -105,6 +111,10 @@ if __name__=='__main__':
         LIMIT=LIMIT//2
     if arg_vars[no_load_str] is not None:
         NO_LOAD=True
+    if arg_vars[no_attn_str] is not None:
+        ATTENTION=False
+    if arg_vars[no_res_str] is not None:
+        RESIDUAL=False
     
     SHAPE=input_shape_dict[BLOCK]
 
@@ -156,7 +166,7 @@ if __name__=='__main__':
         discriminator_optimizer = tf.keras.optimizers.SGD()
 
         output_blocks=[BLOCK]
-        autoenc=aegen(BLOCK,FLAT,output_blocks)
+        autoenc=aegen(BLOCK,flat_latent=FLAT,residual=RESIDUAL,attention=ATTENTION,output_blocks=output_blocks)
         gen=extract_generator(autoenc,BLOCK,output_blocks)
         disc=conv_discrim(BLOCK)
 
@@ -258,19 +268,21 @@ if __name__=='__main__':
                     autoenc.load_weights(most_recent+'/cp.ckpt')
                     print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
             for epoch in range(start_epoch,ae_epochs,1):
+                start=timer()
                 for i,images in enumerate(dataset):
                     ae_loss=train_step_dist_ae(images)
                     avg_auto_loss+=ae_loss/LIMIT
                     if i%100==0:
                         print('\tbatch {} autoencoder loss {}'.format(i,ae_loss))
+                end=timer()
                 avg_auto_loss_history.append(avg_auto_loss)
-                print('epoch: {} ended with avg ae loss {}'.format(epoch,avg_auto_loss))
-                if GRAPH_LOSS==True:
-                    data_to_csv(name,'auto',avg_auto_loss_history)
+                print('epoch: {} ended with avg ae loss {} time elapsed: {}'.format(epoch,avg_auto_loss,end-start))
                 save_dir=check_dir_auto+'/epoch_{}/'.format(epoch)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 autoenc.save_weights(save_dir+'cp.ckpt')
+            if GRAPH_LOSS==True:
+                data_to_csv(name,'auto',avg_auto_loss_history)
         avg_disc_loss_history=[]
         avg_gen_loss_history=[]
         disc_ckpt_paths=get_checkpoint_paths(check_dir_disc)
@@ -329,6 +341,7 @@ if __name__=='__main__':
                 gen.load_weights(most_recent_gen+'/cp.ckpt')
                 print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
         for epoch in range(start_epoch_adverse,epochs,1):
+            start()
             gen_training=True
             disc_training=True
             avg_gen_loss=0.0
@@ -348,9 +361,10 @@ if __name__=='__main__':
                         gen_training=True
                     avg_gen_loss+=gen_loss/LIMIT
                     avg_disc_loss+=disc_loss/LIMIT
+            end=timer()
             avg_disc_loss_history.append(avg_disc_loss)
             avg_gen_loss_history.append(avg_gen_loss)
-            print('epoch: {} ended with disc_loss {} and gen loss {} after {} batches'.format(epoch,avg_disc_loss,avg_gen_loss,i))
+            print('epoch: {} ended with disc_loss {} and gen loss {} after {} batchestime elapsed={}' .format(epoch,avg_disc_loss,avg_gen_loss,i,end-start))
             if GRAPH_LOSS == True:
                 data_to_csv(name,'generator',avg_gen_loss_history)
                 data_to_csv(name,'discriminator',avg_disc_loss_history)

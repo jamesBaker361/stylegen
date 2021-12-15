@@ -22,19 +22,22 @@ def get_encoder(inputs,input_dim,name,flat_latent,residual,attention,m=3):
     x=layers.BatchNormalization()(x)
     x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
-    x = ResNextBlock(kernel_size=(4, 4))(x)
+    if residual==True:
+        x = ResNextBlock(kernel_size=(4, 4))(x)
     x = layers.Conv2D(32, (1, 1), (1, 1))(x)
     x=layers.BatchNormalization()(x)
     x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
     for _ in range(m):
         channels = x.shape[-1] *2
-        x = ResNextBlock(kernel_size=(4, 4))(x)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
         x=layers.BatchNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
-        x = ResNextBlock(kernel_size=(4, 4))(x)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
         x=layers.BatchNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
@@ -42,9 +45,12 @@ def get_encoder(inputs,input_dim,name,flat_latent,residual,attention,m=3):
         x=layers.BatchNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
-    x = ResNextBlock(kernel_size=(4, 4))(x)
-    x = attn_block(x)
-    x = ResNextBlock(kernel_size=(4, 4))(x)
+    if residual==True:
+        x = ResNextBlock(kernel_size=(4, 4))(x)
+    if attention==True:
+        x = attn_block(x)
+    if residual==True:
+        x = ResNextBlock(kernel_size=(4, 4))(x)
     x = GroupNormalization()(x)
     x = tk.activations.swish(x)
     if flat_latent==True:
@@ -56,20 +62,25 @@ def make_decoder(input_dim,name,flat_latent,residual,attention):
     inputs = tk.Input(shape=input_dim,name='decoder_input')
     if flat_latent==False:
         x=inputs
-        x = ResNextBlock(kernel_size=(4, 4),name='decoder_input_')(x)
-        x = attn_block(x)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
+        if attention==True:
+            x = attn_block(x)
     else:
         new_shape=(4,4, flat_latent_dim//16)
         x=layers.Reshape(new_shape,name='decoder_input_')(inputs)
-    x = ResNextBlock(kernel_size=(4, 4))(x)
+    if residual==True:
+        x = ResNextBlock(kernel_size=(4, 4))(x)
     while x.shape[-2]<256:
         channels = max(x.shape[-1]//2,32)
-        x = ResNextBlock(kernel_size=(4, 4))(x)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2DTranspose(channels, (4, 4), (2, 2),padding='same')(x)
         x=layers.BatchNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
-        x = ResNextBlock(kernel_size=(4, 4))(x)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
         x=layers.BatchNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
