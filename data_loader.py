@@ -28,28 +28,7 @@ def get_all_img_paths(block,styles,genres): #gets all image path of images of st
         new_file='{}/{}/{}'.format(npz_root,block,n)
         if os.path.exists(new_file):
             ret.append(new_file)
-    '''print(names)
-    for style in styles:
-        imgs=os.listdir('{}/{}/{}'.format(npz_root,block,style))
-        for i in imgs:
-            ret.append('{}/{}/{}/{}'.format(npz_root,block,style,i))'''
     return ret
-
-def data_gen(list_of_batches):
-    def _data_gen():
-        for batch_paths in list_of_batches:
-            batch=tf.stack([np.load(path)['features'] for path in batch_paths])
-            yield batch
-    return _data_gen
-
-def data_gen_2(flat_list):
-    def _data_gen_2():
-        for path in flat_list:
-            features=np.load(path)['features']
-            if len(features.shape)>3:
-                features=features[0]
-            yield features
-    return _data_gen_2
 
 def data_gen_slow(blocks,flat_list):
     def _data_gen_slow():
@@ -63,7 +42,7 @@ def data_gen_slow(blocks,flat_list):
             yield tuple([f for f in vgg(features)])
     return _data_gen_slow
 
-def get_dataset_gen(block,batch_size,limit=5000,styles=[], genres=all_genres): #makes batched dataset from generator
+def get_dataset_gen_slow(blocks,batch_size,limit=5000,styles=all_styles,genres=all_genres_art):
     '''makes batched dataset from generator
 
     Arguments
@@ -73,17 +52,9 @@ def get_dataset_gen(block,batch_size,limit=5000,styles=[], genres=all_genres): #
     limit -- int. how many images
     styles -- [str]. something like ['expressionism', 'realism',,,,] 
     genres -- [int]. [-1,,,17] numbers can range from 1 to 20
-    '''
-    if len(styles)==0:
-        styles=[s for s in os.listdir('{}/{}'.format(npz_root,block)) if s[0]!='.']
-    flat_list=get_all_img_paths(block,styles,genres)
-    random.shuffle(flat_list)
-    flat_list=flat_list[:limit]
-    gen=data_gen_2(flat_list)
-    output_sig_shape=input_shape_dict[block]
-    return tf.data.Dataset.from_generator(gen,output_signature=(tf.TensorSpec(shape=output_sig_shape))).batch(batch_size)
 
-def get_dataset_gen_slow(blocks,batch_size,limit=5000,styles=all_styles,genres=all_genres_art):
+    Returns
+    '''
     flat_list=get_all_img_paths(no_block,styles,genres) #no_block
     random.shuffle(flat_list)
     flat_list=flat_list[:limit]

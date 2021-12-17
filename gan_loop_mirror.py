@@ -28,7 +28,7 @@ from gif_making import *
 from helpers import *
 from transfer import *
 
-EPOCHS=75 #how mnay epochs to train generator and discriminator for
+EPOCHS=50 #how mnay epochs to train generator and discriminator for
 AE_EPOCHS=50 #how many epochs to pre train autoencoder for
 BATCH_SIZE_PER_REPLICA=1 #batch size per gpu
 LIMIT=80000 #how many images in total dataset

@@ -6,9 +6,12 @@ def get_checkpoint_paths(dir):
     '''
     Parameters
     ----------
-    dir --str. 
+    dir --str. something like checkpoints/modelname/{gen||auto||disc} 
     '''
-    return sorted([ f.path for f in os.scandir(dir) if f.is_dir() and str(f).find('epoch') != -1 ],key=lambda x: int(x[x.rfind('_')+1:]),reverse=True)
+    try:
+        return sorted([ f.path for f in os.scandir(dir) if f.is_dir() and str(f).find('epoch') != -1 ],key=lambda x: int(x[x.rfind('_')+1:]),reverse=True)
+    except FileNotFoundError:
+        return []
 
 def get_ckpt_epoch_from_paths(ckpt_paths):
     '''
@@ -28,6 +31,10 @@ def get_ckpt_epoch_from_paths(ckpt_paths):
 
 def get_ckpt_epochs(dir):
     '''
+    Parameters:
+    -----------
+    dir --str. something like checkpoints/modelname/{gen||auto||disc} 
+
     Returns:
     --------
     most_recent -- str. path of the latest checkpoint
@@ -36,6 +43,34 @@ def get_ckpt_epochs(dir):
     '''
     ckpt_paths=get_checkpoint_paths(dir)
     return get_ckpt_epoch_from_paths(ckpt_paths)
+
+
+def diversity_loss(gen,batch_size=4):
+    ''' the diversity loss is made to penalize the generator for having too similar outputs; based on https://arxiv.org/abs/1701.02096
+
+    Parameters:
+    ----------
+
+    gen -- tf.Model. the generator that should make samples
+    batch_size -- int. the amount of samples it should make for each step
+
+    Returns:
+    -------
+    total_loss -- tensor constant. the loss (bigger if images are less similar)
+
+    '''
+    gen_noise_dim=gen.input.shape
+    if gen_noise_dim[0]==None:
+        gen_noise_dim=gen_noise_dim[1:]
+    samples=[]
+    for _ in range(batch_size):
+        noise = tf.random.normal([1, *gen_noise_dim])
+        samples.append(gen(noise)[0])
+    total_loss=0.0
+    for i in range(batch_size):
+        for j in range(i+1,batch_size):
+            total_loss+=tf.math.log(tf.norm(samples[i]-samples[j]))
+    return total_loss
 
 if __name__=='__main__':
     name='human_flat_block5_conv1'
