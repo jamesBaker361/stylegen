@@ -92,7 +92,7 @@ def get_dataset_gen_slow(blocks,batch_size,limit=5000,styles=all_styles,genres=a
     gen=data_gen_slow(blocks,flat_list)
     output_sig_shapes=tuple([tf.TensorSpec(shape=input_shape_dict[block]) for block in blocks])
     print(output_sig_shapes)
-    return tf.data.Dataset.from_generator(gen,output_signature=output_sig_shapes).batch(batch_size)
+    return tf.data.Dataset.from_generator(gen,output_signature=output_sig_shapes).batch(batch_size,drop_remainder=True)
 
 def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real dataset to compare to generated images for FID
     if len(styles)==0:

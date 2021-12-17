@@ -1,6 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras as tk
 from tensorflow.keras import layers,Model
+from tensorflow_addons.layers import InstanceNormalization
 import string
 
 from tensorflow.python.keras.activations import sigmoid
@@ -19,13 +20,13 @@ flat_latent_dim=64 #the dim of latent space is dim is 1-D
 def get_encoder(inputs,input_dim,name,flat_latent,residual,attention,m=3):
     #inputs = tk.Input(shape=input_dim)
     x = layers.Conv2D(max(8,input_dim[-1]), (1, 1), (1, 1))(inputs)
-    x=layers.BatchNormalization()(x)
+    x=InstanceNormalization()(x)
     x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
     if residual==True:
         x = ResNextBlock(kernel_size=(4, 4))(x)
     x = layers.Conv2D(32, (1, 1), (1, 1))(x)
-    x=layers.BatchNormalization()(x)
+    x=InstanceNormalization()(x)
     x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
     for _ in range(m):
@@ -33,16 +34,16 @@ def get_encoder(inputs,input_dim,name,flat_latent,residual,attention,m=3):
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
-        x=layers.BatchNormalization()(x)
+        x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
-        x=layers.BatchNormalization()(x)
+        x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
         x=layers.Conv2D(channels,(3,3),padding='same')(x)
-        x=layers.BatchNormalization()(x)
+        x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
     if residual==True:
@@ -76,16 +77,16 @@ def make_decoder(input_dim,name,flat_latent,residual,attention):
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2DTranspose(channels, (4, 4), (2, 2),padding='same')(x)
-        x=layers.BatchNormalization()(x)
+        x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
-        x=layers.BatchNormalization()(x)
+        x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
         x=layers.Conv2D(channels,(3,3),padding='same')(x)
-        x=layers.BatchNormalization()(x)
+        x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)

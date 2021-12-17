@@ -242,6 +242,15 @@ if __name__=='__main__':
         fid_func=calculate_fid(iv3_model)
 
     def train(dataset,epochs=EPOCHS,picture=True,ae_epochs=AE_EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,save_gen=True,save_disc=True):
+        '''the entire training function, training autoencoder and GAN
+
+        Parameters:
+        ----------
+
+        dataset -- tf BatchedDataSet. The iterable object that supplies all the images
+        epochs -- int. how many epochs to train GAN for
+        picture -- bool. Whether to make generate images or not
+        '''
         check_dir_auto='./{}/{}/{}'.format(checkpoint_dir,name,'auto')
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
         check_dir_disc='./{}/{}/{}'.format(checkpoint_dir,name,'disc')
@@ -251,7 +260,6 @@ if __name__=='__main__':
                 os.makedirs(d)
         if AUTO==True:
             print('autoencoder training')
-            avg_auto_loss=0.0
             avg_auto_loss_history=[]
             auto_ckpt_paths=get_checkpoint_paths(check_dir_auto)
             start_epoch=0
@@ -268,6 +276,7 @@ if __name__=='__main__':
                     autoenc.load_weights(most_recent+'/cp.ckpt')
                     print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
             for epoch in range(start_epoch,ae_epochs,1):
+                avg_auto_loss=0.0
                 start=timer()
                 for i,images in enumerate(dataset):
                     ae_loss=train_step_dist_ae(images)
@@ -281,7 +290,7 @@ if __name__=='__main__':
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 autoenc.save_weights(save_dir+'cp.ckpt')
-            if GRAPH_LOSS==True:
+            if GRAPH_LOSS==True and len(avg_auto_loss_history)>0:
                 data_to_csv(name,'auto',avg_auto_loss_history)
         avg_disc_loss_history=[]
         avg_gen_loss_history=[]
@@ -341,7 +350,7 @@ if __name__=='__main__':
                 gen.load_weights(most_recent_gen+'/cp.ckpt')
                 print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
         for epoch in range(start_epoch_adverse,epochs,1):
-            start()
+            start=timer() #start a timer to time the epoch
             gen_training=True
             disc_training=True
             avg_gen_loss=0.0
