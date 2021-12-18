@@ -19,7 +19,7 @@ from autoencoderscopy import aegen,extract_generator
 noise_dim=noise_dim_dcgan
 from discriminator import conv_discrim
 
-from data_loader import get_dataset_gen, get_dataset_gen_slow,get_real_imgs_fid
+from data_loader import get_dataset_gen_slow,get_real_imgs_fid
 from timeit import default_timer as timer
 from keras.applications.inception_v3 import InceptionV3
 from fid_metric import calculate_fid
@@ -43,6 +43,8 @@ HALF=False #whether to just use half the dataset
 NO_LOAD=False #whether to load pretrained models 
 RESIDUAL=True #whether to use resnext layers in the AEGEN
 ATTENTION=True #whether to use attn block layers in the AEGEN
+DIVERSITY=True #whether to optimize generator to care about diversity
+BETA=0.5 #beta coefficient on diversity term
 
 
 
@@ -65,6 +67,10 @@ if __name__=='__main__':
     no_load_str='no_load'
     no_attn_str='no_attn'
     no_res_str='no_res'
+    ae_epochs_str='ae_epochs'
+    no_diversity_str='no_diversity'
+    beta_str='beta'
+
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
     parser.add_argument('--{}'.format(batch_size_replica_str),help='batch size',type=int)
@@ -81,6 +87,9 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(no_load_str),help='whether to load past pretrained versions',type=bool)
     parser.add_argument('--{}'.format(no_attn_str),help='whether to not use attentional blocks or not',type=bool)
     parser.add_argument('--{}'.format(no_res_str),help ='whether to not use resnext blocks',type=bool)
+    parser.add_argument('--{}'.format(ae_epochs_str),help='how many epochs to train autoencoder for',type=int)
+    parser.add_argument('--{}'.format(no_diversity_str),help='whether to train the generator to maximize diversity of samples',type=bool)
+    parser.add_argument('--{}'.format(beta_str),help='beta coefficient on diversity term',type=float)
 
     args = parser.parse_args()
 
@@ -115,6 +124,12 @@ if __name__=='__main__':
         ATTENTION=False
     if arg_vars[no_res_str] is not None:
         RESIDUAL=False
+    if arg_vars[ae_epochs_str] is not None:
+        AE_EPOCHS=arg_vars[ae_epochs_str]
+    if arg_vars[no_diversity_str] is not None:
+        DIVERSITY=False
+    if arg_vars[beta_str] is not None:
+        BETA=arg_vars[beta_str]
     
     SHAPE=input_shape_dict[BLOCK]
 
@@ -138,11 +153,12 @@ if __name__=='__main__':
     print('{} * {} = {}'.format(BATCH_SIZE_PER_REPLICA,strategy.num_replicas_in_sync,GLOBAL_BATCH_SIZE))
 
     with strategy.scope():
+
         cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True,reduction=tf.keras.losses.Reduction.NONE)
 
         def discriminator_loss(real_output, fake_output):
             real_vector=tf.ones_like(real_output)+tf.random.normal(shape=real_output.shape,mean=0,stddev=.05)
-            fake_vector=tf.zeros_like(fake_output)+tf.random.normal(shape=fake_output.shape,mean=.15,stddev=.05)
+            fake_vector=tf.zeros_like(fake_output)+tf.random.normal(shape=fake_output.shape,mean=0,stddev=.05)
             real_loss = cross_entropy(real_vector, real_output)
             fake_loss = cross_entropy(fake_vector, fake_output)
             total_loss = real_loss + fake_loss
@@ -151,6 +167,25 @@ if __name__=='__main__':
         def generator_loss(fake_output):
             loss=cross_entropy(tf.ones_like(fake_output), fake_output)
             return tf.nn.compute_average_loss(loss, global_batch_size=GLOBAL_BATCH_SIZE)
+
+        def diversity_loss_from_samples(samples):
+            '''the diversity loss is made to penalize the generator for having too similar outputs; based on https://arxiv.org/abs/1701.02096
+            
+            Parameters:
+            -----------
+
+            samples -- [feature maps].
+
+            Returns:
+            -------
+            total_loss -- tensor constant. the loss (smaller if images are less similar)
+            '''
+            batch_size=len(samples)
+            loss=0 #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
+            for i in range(batch_size):
+                for j in range(i+1,batch_size):
+                    loss+=tf.math.log(tf.norm(samples[i]-samples[j]))
+            return tf.nn.compute_average_loss([-loss], global_batch_size=GLOBAL_BATCH_SIZE)
 
         def autoencoder_loss(images, generated_images):
             loss=[tf.reduce_mean(tf.square(tf.subtract(images, generated_images)))]
@@ -176,14 +211,22 @@ if __name__=='__main__':
         print('noise_dim',noise_dim)
         print('[1, * noise_dim]',[1, * noise_dim])
 
-    def train_step(images,gen_training,disc_training):
+    def train_step(images,gen_training,disc_training,diversity_training,beta=0.75):
         """A single step to train the generator and discriminator
 
-        Args:
-            images: the real genuine images
+        Parameters:
+        -----------
+        images -- []. the real genuine images
+        gen_training -- bool. whether to train the generator this step.
+        disc_training -- bool. whether to train the discriminator this step.
+        diversity_training -- bool. whether to train for diversity
+        beta -- float. coefficient on the diversity loss
 
         Returns:
-
+        --------
+        disc_loss -- float. discriminator loss
+        gen_loss -- float. generator loss
+        div_loss. float. generator diversity loss
         """
         batch_size=images.shape[0]
         noise = tf.random.uniform([batch_size, * noise_dim])
@@ -194,16 +237,29 @@ if __name__=='__main__':
             real_output = disc(images, training=disc_training)
             fake_output = disc(generated_images, training=disc_training)
 
-            gen_loss = generator_loss(fake_output)
+            gen_loss= generator_loss(fake_output)
             disc_loss = discriminator_loss(real_output, fake_output)
-        if gen_training is True:
-            gradients_of_generator = gen_tape.gradient(gen_loss, gen.trainable_variables)
+            #div_loss=0
+            #if diversity_training == True:
+            diversity_batch_size=4
+            #sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
+            samples=gen(tf.random.normal([diversity_batch_size, * noise_dim]),training=diversity_training)
+            div_loss=diversity_loss_from_samples(samples)
+            div_loss*=BETA
+            if gen_training == True:
+                combined_loss=gen_loss
+            if diversity_training == True:
+                combined_loss=div_loss
+            if diversity_training==True and gen_training==True:
+                combined_loss=div_loss+gen_loss 
+        if gen_training is True or diversity_training is True:
+            gradients_of_generator = gen_tape.gradient(combined_loss, gen.trainable_variables)
             generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
         if disc_training is True:
             gradients_of_discriminator = disc_tape.gradient(disc_loss, disc.trainable_variables)
             discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, disc.trainable_variables))
 
-        return disc_loss,gen_loss
+        return disc_loss,gen_loss,div_loss
 
     def train_step_ae(images): #training autoencoder to reconstruct things, not generate
         with tf.GradientTape() as tape:
@@ -217,8 +273,8 @@ if __name__=='__main__':
 
     def get_train_step_dist():
         @tf.function
-        def train_step_dist(images,gen_training=True,disc_training=True):
-            per_replica_losses = strategy.run(train_step, args=(images,gen_training,disc_training,))
+        def train_step_dist(images,gen_training=True,disc_training=True,diversity_training=True):
+            per_replica_losses = strategy.run(train_step, args=(images,gen_training,disc_training,diversity_training,))
             return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
         return train_step_dist
     
@@ -294,6 +350,7 @@ if __name__=='__main__':
                 data_to_csv(name,'auto',avg_auto_loss_history)
         avg_disc_loss_history=[]
         avg_gen_loss_history=[]
+        avg_diversity_loss_history=[]
         disc_ckpt_paths=get_checkpoint_paths(check_dir_disc)
         if pre_train_epochs>0 and len(disc_ckpt_paths)==0:
             print('pretraining')
@@ -301,7 +358,7 @@ if __name__=='__main__':
                 avg_disc_loss=0.0
                 for i,image_tuples in enumerate(dataset):
                     for images in image_tuples:
-                        disc_loss,_=train_step_dist(images,gen_training=False,disc_training=True)
+                        disc_loss,_,__=train_step_dist(images,gen_training=False,disc_training=True,diversity_training=False)
                         if i % 100 == 0:
                             print('\tbatch {} disc loss {}'.format(i,disc_loss))
                         avg_disc_loss+=disc_loss/LIMIT
@@ -353,13 +410,15 @@ if __name__=='__main__':
             start=timer() #start a timer to time the epoch
             gen_training=True
             disc_training=True
+            diversity_training=DIVERSITY
             avg_gen_loss=0.0
             avg_disc_loss=0.0
+            avg_diversity_loss=0.0
             for i,image_tuples in enumerate(dataset):
                 for images in image_tuples: 
-                    disc_loss,gen_loss=train_step_dist(images,gen_training,disc_training)
+                    disc_loss,gen_loss,div_loss=train_step_dist(images,gen_training,disc_training,diversity_training)
                     if i%100==0:
-                        print('\tbatch {} disc_loss: {} gen loss: {}'.format(i,disc_loss,gen_loss))
+                        print('\tbatch {} disc_loss: {} gen loss: {} diversity loss: {}'.format(i,disc_loss,gen_loss,div_loss))
                     if disc_loss <= 0.001:
                         disc_training=False
                     else:
@@ -370,13 +429,16 @@ if __name__=='__main__':
                         gen_training=True
                     avg_gen_loss+=gen_loss/LIMIT
                     avg_disc_loss+=disc_loss/LIMIT
+                    avg_diversity_loss+=div_loss/LIMIT
             end=timer()
             avg_disc_loss_history.append(avg_disc_loss)
             avg_gen_loss_history.append(avg_gen_loss)
-            print('epoch: {} ended with disc_loss {} and gen loss {} after {} batchestime elapsed={}' .format(epoch,avg_disc_loss,avg_gen_loss,i,end-start))
+            avg_diversity_loss_history.append(avg_diversity_loss)
+            print('epoch: {} ended with disc_loss {} and gen loss {} after {} batches time elapsed={}' .format(epoch,avg_disc_loss,avg_gen_loss,i,end-start))
             if GRAPH_LOSS == True:
                 data_to_csv(name,'generator',avg_gen_loss_history)
                 data_to_csv(name,'discriminator',avg_disc_loss_history)
+                data_to_csv(name,'diversity',avg_diversity_loss_history)
             if FID == True:
                 fid_batch_size=1000
                 noise = tf.random.normal([fid_batch_size, * interm_noise_dim])

@@ -1,3 +1,4 @@
+import tensorflow as tf
 import os
 from string_globals import *
 #from autoencoderscopy import *
@@ -44,6 +45,24 @@ def get_ckpt_epochs(dir):
     ckpt_paths=get_checkpoint_paths(dir)
     return get_ckpt_epoch_from_paths(ckpt_paths)
 
+def _diversity_loss_from_samples(samples):
+    '''
+    
+    Parameters:
+    -----------
+
+    samples -- [feature maps].
+
+    Returns:
+    -------
+    total_loss -- tensor constant. the loss (smaller if images are less similar)
+    '''
+    batch_size=len(samples)
+    total_loss=0.0
+    for i in range(batch_size):
+        for j in range(i+1,batch_size):
+            total_loss+=tf.math.log(tf.norm(samples[i]-samples[j]))
+    return -1.0*total_loss
 
 def diversity_loss(gen,batch_size=4):
     ''' the diversity loss is made to penalize the generator for having too similar outputs; based on https://arxiv.org/abs/1701.02096
@@ -56,7 +75,7 @@ def diversity_loss(gen,batch_size=4):
 
     Returns:
     -------
-    total_loss -- tensor constant. the loss (bigger if images are less similar)
+    total_loss -- tensor constant. the loss (smaller if images are less similar)
 
     '''
     gen_noise_dim=gen.input.shape
@@ -70,7 +89,7 @@ def diversity_loss(gen,batch_size=4):
     for i in range(batch_size):
         for j in range(i+1,batch_size):
             total_loss+=tf.math.log(tf.norm(samples[i]-samples[j]))
-    return total_loss
+    return -1.0*total_loss
 
 if __name__=='__main__':
     name='human_flat_block5_conv1'
