@@ -10,9 +10,18 @@ from data_processing import vgg_layers
 
 from other_globals import *
 
-input_shape=input_shape_dict[block1_conv1]
+def conv_discrim(block,labels=0):
+    """[summary]
 
-def conv_discrim(block):
+    Args:
+    -----
+        block ([str]): [description]
+        labels (int, optional): [description]. Defaults to 0.
+
+    Returns:
+    ------
+        tf.keras.Model : the discriminator; returns either value between 0-1, and if labels>0, a classification vector [0,0,0,,,1,,0]
+    """
     input_shape=input_shape_dict[block]
     inputs=layers.Input(shape=input_shape)
 
@@ -31,11 +40,26 @@ def conv_discrim(block):
         x=layers.LeakyReLU()(x)
 
     x=layers.Flatten()(x)
-    x = layers.Dense(8)(x)
-    x = layers.Dense(1,activation='sigmoid')(x)
+    z = layers.Dense(8)(x)
+    z=layers.BatchNormalization()(z)
+    z = layers.Dense(1,activation='sigmoid')(z)
 
-    return tk.Model(inputs=inputs, outputs=x)
+    if labels>0:#adds classification head
+        y=layers.Dropout(.2)(x)
+        y=layers.Dense(labels*4)(y)
+        y=layers.BatchNormalization()(y)
+        y=layers.Dropout(.2)(y)
+        y=layers.Dense(labels*2)(y)
+        y=layers.BatchNormalization()(y)
+        y=layers.Dense(labels,activation='softmax')(y)
+    else:
+        y=z
+
+    return tk.Model(inputs=inputs, outputs=[z,y])
+
+
 
 if __name__ =='__main__':
-    model=conv_discrim(block1_conv1)
+    model=conv_discrim(block1_conv1,0)
     model.summary()
+    print(model(tf.random.normal([1, * input_shape_dict[block1_conv1]])))

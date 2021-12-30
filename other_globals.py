@@ -37,6 +37,7 @@ block5_pool : (8, 8, 512)
 input_shape_dict=input_shape_dict_big
 all_genres=[_ for _ in range(-1,18)]
 all_genres_art=[_ for _ in range(0,18)] #genre -1 is photographs of weird shit
+base_flat_noise_dim=128 #the noise dim without any conditionals
 
 styles_to_int_dict = {'early-renaissance' : 1,
 'high-renaissance' : 2,

@@ -7,6 +7,7 @@ import random
 import numpy as np
 import pandas as pd
 from data_processing import vgg_layers
+from sklearn.preprocessing import OneHotEncoder
 
 
 def get_all_img_paths(block,styles,genres): #gets all image path of images of style/genre (default)
@@ -54,6 +55,9 @@ def get_dataset_gen_slow(blocks,batch_size,limit=5000,styles=all_styles,genres=a
     genres -- [int]. [-1,,,17] numbers can range from 1 to 20
 
     Returns
+    -------
+
+    dataset --tf.Data.Dataset.
     '''
     flat_list=get_all_img_paths(no_block,styles,genres) #no_block
     random.shuffle(flat_list)
@@ -63,6 +67,56 @@ def get_dataset_gen_slow(blocks,batch_size,limit=5000,styles=all_styles,genres=a
     gen=data_gen_slow(blocks,flat_list)
     output_sig_shapes=tuple([tf.TensorSpec(shape=input_shape_dict[block]) for block in blocks])
     print(output_sig_shapes)
+    return tf.data.Dataset.from_generator(gen,output_signature=output_sig_shapes).batch(batch_size,drop_remainder=True)
+
+
+def data_gen_slow_labels(blocks,flat_list,one_hot):
+    """also returns the class labels, encoded by a one-hot encoder
+
+    Parameters:
+    ----------
+    blocks -- [str]. the blocks of vgg
+    flat_list -- [str]. list of paths of all the npz files
+    one_hot -- OneHotEncoder. already fit to the artistic style labels
+    """
+    def _data_gen_slow_labels():
+        vgg=vgg_layers(blocks)
+        for path in flat_list:
+            npz_object=np.load(path)
+            features=npz_object['features']
+            ''' these should all be no_block but technically they COULD be any block
+            like it would be redundant to run a the output of  a feature layer through vgg but we could
+            '''
+            features=tf.keras.applications.vgg19.preprocess_input(features)
+            artistic_style_encoding=one_hot.transform([[str(npz_object['style'])]]).toarray()[0]
+            yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
+    return _data_gen_slow_labels
+
+
+def get_dataset_gen_slow_labels(blocks,batch_size, one_hot,limit=5000,styles=all_styles,genres=all_genres_art):
+    '''makes batched dataset from generator that also provides label encoding
+
+    Arguments
+    --------
+    block -- str. one of [no_block, block1_conv1,,,block5_conv1]
+    batch_size -- int. batch size
+    limit -- int. how many images
+    styles -- [str]. something like ['expressionism', 'realism',,,,] 
+    genres -- [int]. [-1,,,17] numbers can range from 1 to 20
+    one_hot -- OneHotEncoder. fit to the styles
+
+    Returns
+    -------
+
+    dataset -- tf.data.Dataset.
+    '''
+    flat_list=get_all_img_paths(no_block,styles,genres) #no_block
+    random.shuffle(flat_list)
+    flat_list=flat_list[:limit]
+    flat_list=flat_list[:batch_size*(len(flat_list)//batch_size)]
+    print('images in dataset = {}'.format(len(flat_list)))
+    gen=data_gen_slow_labels(blocks,flat_list,one_hot)
+    output_sig_shapes=tuple([tf.TensorSpec(shape=input_shape_dict[block]) for block in blocks]+[tf.TensorSpec(shape=(len(styles)))])
     return tf.data.Dataset.from_generator(gen,output_signature=output_sig_shapes).batch(batch_size,drop_remainder=True)
 
 def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real dataset to compare to generated images for FID
@@ -81,4 +135,7 @@ def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real
 
 if __name__=='__main__':
     print('balls')
-    data=get_dataset_gen_slow([no_block],2,limit=200000,styles=['cubism'],genres=all_genres_art)
+    styles=["baroque","romanticism","northern-rennaissance"]
+    dataset,one_hot=get_dataset_gen_slow_labels([no_block],3,limit=5,styles=styles)
+    for d in dataset:
+        print(d)
