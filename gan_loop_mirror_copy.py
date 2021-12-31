@@ -49,6 +49,7 @@ DIVERSITY=True #whether to optimize generator to care about diversity
 BETA=0.5 #beta coefficient on diversity term
 CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artistic style labels as input to the flat generator
 GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
+LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
 
 
 
@@ -227,7 +228,7 @@ if __name__=='__main__':
             loss=0 #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
             for i in range(batch_size):
                 for j in range(i+1,batch_size):
-                    loss+=tf.math.log(tf.norm(samples[i]-samples[j]))
+                    loss+=tf.norm(samples[i]-samples[j])
             return tf.nn.compute_average_loss([-loss], global_batch_size=GLOBAL_BATCH_SIZE)
 
         def classification_loss(labels,predicted_labels):
@@ -260,10 +261,7 @@ if __name__=='__main__':
         else:
             autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=output_blocks)
         gen=extract_generator(autoenc,BLOCK,output_blocks)
-        if CONDITIONAL ==True:
-            disc=conv_discrim(BLOCK,len(art_styles))
-        else:
-            disc=conv_discrim(BLOCK)
+        disc=conv_discrim(BLOCK,len(art_styles))
 
         noise_dim=gen.input.shape
         if FLAT==False and len(noise_dim)!=3:
@@ -290,8 +288,7 @@ if __name__=='__main__':
         gen_loss -- float. generator loss
         div_loss. float. generator diversity loss
         """
-        if CONDITIONAL ==True:
-            (images,labels)=images
+        (images,labels)=images
         batch_size=images.shape[0]
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
 
@@ -334,11 +331,11 @@ if __name__=='__main__':
                 combined_loss=div_loss+gen_loss
             if GAMMA!=0 and CONDITIONAL==True:
                 gen_class_label_loss= GAMMA * classification_loss(fake_labels, art_style_encoding_list)
-                disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
-                class_label_loss= gen_class_label_loss+disc_class_label_loss
+            disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
+            class_label_loss= gen_class_label_loss+disc_class_label_loss
 
-                disc_loss+=class_label_loss
-                combined_loss+=class_label_loss
+            disc_loss+=class_label_loss
+            combined_loss+=class_label_loss
         #combined_loss= combined_loss+ class_label_loss
         #disc_loss= disc_loss + class_label_loss
         if gen_training is True or diversity_training is True:
@@ -352,9 +349,8 @@ if __name__=='__main__':
 
     def train_step_ae(images): #training autoencoder to reconstruct things, not generate
         with tf.GradientTape() as tape:
+            (images,labels)=images # we don't need the artistic style labels for reconstruction
             reconstructed_images=autoenc(images)
-            if CONDITIONAL==True:
-                (images,labels)=images # we don't need the artistic style labels for reconstruction
             ae_loss=autoencoder_loss(images,reconstructed_images)
 
         gradients_of_generator = tape.gradient(ae_loss, autoenc.trainable_variables)
@@ -422,6 +418,8 @@ if __name__=='__main__':
                 if start_epoch>0:
                     autoenc.load_weights(most_recent+'/cp.ckpt')
                     print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
+                    if ae_epochs>start_epoch:
+                        LOAD_GEN=False
             for epoch in range(start_epoch,ae_epochs,1):
                 avg_auto_loss=0.0
                 start=timer()
@@ -486,7 +484,7 @@ if __name__=='__main__':
                 print('successfully loaded discriminator from epoch {}'.format(start_epoch_disc))
         start_epoch_adverse=0
         gen_ckpt_paths=get_checkpoint_paths(check_dir_gen)
-        if len(gen_ckpt_paths)>0 and NO_LOAD==False:
+        if len(gen_ckpt_paths)>0 and NO_LOAD==False and LOAD_GEN==True:
             most_recent_gen,start_epoch_adverse=get_ckpt_epoch_from_paths(gen_ckpt_paths)
             while 'cp.ckpt.index' not in set(os.listdir(most_recent_gen)):
                 new_start_epoch=max(0,start_epoch_adverse-1)
@@ -570,10 +568,8 @@ if __name__=='__main__':
                     cv2.imwrite(new_img_path,gen_img)
                     print('the file exists == {}'.format(os.path.exists(new_img_path)))
     
-    if CONDITIONAL ==True:
-        dataset=get_dataset_gen_slow_labels(output_blocks,GLOBAL_BATCH_SIZE,one_hot,LIMIT,art_styles,genres)
-    else:
-        dataset=get_dataset_gen_slow(output_blocks,GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
+    dataset=get_dataset_gen_slow_labels(output_blocks,GLOBAL_BATCH_SIZE,one_hot,LIMIT,art_styles,genres)
+    #dataset=get_dataset_gen_slow(output_blocks,GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
     dataset=strategy.experimental_distribute_dataset(dataset)
     print('main loop')
     print('genres ',genres)
