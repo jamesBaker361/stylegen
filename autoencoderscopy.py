@@ -64,7 +64,7 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0):
     inputs = tk.Input(shape=input_dim,name='decoder_input')
     x=inputs
     if flat_latent_dim>0:
-        new_shape=(8,8, 4)
+        new_shape=(2,2, 64)
         x=layers.Dense(256)(x)
         x=layers.Reshape(new_shape,name='decoder_reshape_')(x)
     if residual==True:
@@ -79,10 +79,6 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0):
         x=layers.LeakyReLU()(x)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
-        x=InstanceNormalization()(x)
-        x=layers.Dropout(.2)(x)
-        x=layers.LeakyReLU()(x)
-        x=layers.Conv2D(channels,(3,3),padding='same')(x)
         x=InstanceNormalization()(x)
         x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
@@ -138,7 +134,7 @@ def extract_generator(model,block,output_blocks):
         output_blocks.append(block)
     vgg=vgg_layers(output_blocks)
     x=vgg(x)
-    return Model(inputs=inputs, outputs=x,name='generator')
+    return Model(inputs=inputs, outputs=x,name='extracted_generator')
 
 if __name__=='__main__':
     for block in input_shape_dict.keys():

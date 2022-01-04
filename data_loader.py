@@ -89,7 +89,10 @@ def data_gen_slow_labels(blocks,flat_list,one_hot):
             '''
             features=tf.keras.applications.vgg19.preprocess_input(features)
             artistic_style_encoding=one_hot.transform([[str(npz_object['style'])]]).toarray()[0]
-            yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
+            if len(blocks)==1:
+                yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
+            else:
+                yield tuple([f[0] for f in vgg(features)]+[artistic_style_encoding])
     return _data_gen_slow_labels
 
 
