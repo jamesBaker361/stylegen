@@ -196,6 +196,12 @@ if __name__=='__main__':
 
         cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True,reduction=tf.keras.losses.Reduction.NONE)
         categorical_cross_entropy=tf.keras.losses.CategoricalCrossentropy(from_logits=True,reduction=tf.keras.losses.Reduction.NONE)
+        
+        def gram_matrix(input_tensor):
+            result = tf.linalg.einsum('bijc,bijd->bcd', input_tensor, input_tensor)
+            input_shape = tf.shape(input_tensor)
+            num_locations = tf.cast(input_shape[1]*input_shape[2], tf.float32)
+            return result/(num_locations)
 
         def discriminator_loss(real_output, fake_output):
             """
@@ -239,9 +245,10 @@ if __name__=='__main__':
             '''
             batch_size=len(samples)
             loss=0 #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
+            gram_samples=[gram_matrix(s) for s in samples]
             for i in range(batch_size):
                 for j in range(i+1,batch_size):
-                    loss+=tf.norm(samples[i]-samples[j])
+                    loss+=tf.norm(gram_samples[i]-gram_samples[j])
             return tf.nn.compute_average_loss([-loss], global_batch_size=GLOBAL_BATCH_SIZE)
 
         def classification_loss(labels,predicted_labels):
