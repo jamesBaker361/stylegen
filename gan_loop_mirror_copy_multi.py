@@ -31,10 +31,10 @@ import random
 from sklearn.preprocessing import OneHotEncoder
 
 EPOCHS=2 #how mnay epochs to train generator and discriminator for
-AE_EPOCHS=2 #how many epochs to pre train autoencoder for
-BATCH_SIZE_PER_REPLICA=2 #batch size per gpu
+AE_EPOCHS=0 #how many epochs to pre train autoencoder for
+BATCH_SIZE_PER_REPLICA=1 #batch size per gpu
 LIMIT=10 #how many images in total dataset
-PRE_EPOCHS=2 #how many epochs to pretrain discriminator on
+PRE_EPOCHS=0 #how many epochs to pretrain discriminator on
 NAME='testing'
 BLOCK=block1_conv1 #which block of vgg we care about
 AUTO=True #whether to use autoencoder generator
@@ -250,6 +250,16 @@ if __name__=='__main__':
                 for j in range(i+1,batch_size):
                     loss+=tf.norm(gram_samples[i]-gram_samples[j])
             return tf.nn.compute_average_loss([-loss], global_batch_size=GLOBAL_BATCH_SIZE)
+        
+        def diversity_loss_from_samples_and_noise(samples,noise):
+            '''based off of https://arxiv.org/abs/1901.09024
+            '''
+            batch_size=len(samples)
+            loss=0 #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
+            for i in range(batch_size):
+                for j in range(i+1,batch_size):
+                    loss+=tf.norm(samples[i]-samples[j])/tf.norm(noise[i]-noise[j])
+            return tf.nn.compute_average_loss([-loss], global_batch_size=GLOBAL_BATCH_SIZE)
 
         def classification_loss(labels,predicted_labels):
             """computes loss between real and predicted style labels
@@ -346,7 +356,7 @@ if __name__=='__main__':
                 disc_loss = discriminator_loss(real_output, fake_output)
                 #div_loss=0
                 if diversity_training == True:
-                    div_loss=diversity_loss_from_samples(samples)
+                    div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
                     diversity_loss_list.append(div_loss)
                     div_loss*=BETA
                 else:
@@ -402,7 +412,7 @@ if __name__=='__main__':
 
 
     #def get_train_step_dist():
-    #@tf.function
+    @tf.function
     def train_step_dist(images,gen_training=True,disc_training=True,diversity_training=True,one_hot=one_hot):
         per_replica_losses = strategy.run(train_step, args=(images,gen_training,disc_training,diversity_training,one_hot,))
         return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
