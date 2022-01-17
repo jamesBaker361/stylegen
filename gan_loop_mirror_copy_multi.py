@@ -46,7 +46,7 @@ NO_LOAD=False #whether to load pretrained models
 RESIDUAL=True #whether to use resnext layers in the AEGEN
 ATTENTION=True #whether to use attn block layers in the AEGEN
 DIVERSITY=True #whether to optimize generator to care about diversity
-BETA=0.25 #beta coefficient on diversity term
+BETA=0.00025 #beta coefficient on diversity term
 CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artistic style labels as input to the flat generator
 GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
@@ -357,8 +357,8 @@ if __name__=='__main__':
                 #div_loss=0
                 if diversity_training == True:
                     div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
-                    diversity_loss_list.append(div_loss)
                     div_loss*=BETA
+                    diversity_loss_list.append(div_loss)
                 else:
                     diversity_loss_list.append(tf.constant(0.0))
 
@@ -376,12 +376,13 @@ if __name__=='__main__':
                     combined_loss=div_loss+gen_loss
                 if GAMMA!=0 and CONDITIONAL==True:
                     gen_class_label_loss= GAMMA * classification_loss(fake_labels, art_style_encoding_list)
-                disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
+                if GAMMA !=0:
+                    disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
                 class_label_loss= gen_class_label_loss+disc_class_label_loss
                 class_label_loss_list.append(class_label_loss)
 
-                disc_loss+=class_label_loss
-                combined_loss+=class_label_loss
+                disc_loss+=disc_class_label_loss
+                combined_loss+=gen_class_label_loss
                 disc_loss_list.append(disc_loss)
                 combined_loss_list.append(combined_loss)
             combined_loss_sum=sum(combined_loss_list)
@@ -473,7 +474,7 @@ if __name__=='__main__':
                     print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
                     if ae_epochs>start_epoch:
                         LOAD_GEN=False
-            for epoch in range(start_epoch,ae_epochs,1):
+            for epoch in range(start_epoch+1,ae_epochs,1):
                 avg_auto_loss=0.0
                 start=timer()
                 for i,images in enumerate(dataset):
@@ -552,7 +553,7 @@ if __name__=='__main__':
             if start_epoch_adverse>0 and NO_LOAD==False:
                 gen.load_weights(most_recent_gen+'/cp.ckpt')
                 print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
-        for epoch in range(start_epoch_adverse,epochs,1):
+        for epoch in range(start_epoch_adverse+1,epochs,1):
             start=timer() #start a timer to time the epoch
             gen_training=True
             disc_training=True
