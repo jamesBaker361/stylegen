@@ -472,9 +472,10 @@ if __name__=='__main__':
                 if start_epoch>0:
                     autoenc.load_weights(most_recent+'/cp.ckpt')
                     print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
+                    start_epoch+=1
                     if ae_epochs>start_epoch:
                         LOAD_GEN=False
-            for epoch in range(start_epoch+1,ae_epochs,1):
+            for epoch in range(start_epoch,ae_epochs,1):
                 avg_auto_loss=0.0
                 start=timer()
                 for i,images in enumerate(dataset):
@@ -553,7 +554,8 @@ if __name__=='__main__':
             if start_epoch_adverse>0 and NO_LOAD==False:
                 gen.load_weights(most_recent_gen+'/cp.ckpt')
                 print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
-        for epoch in range(start_epoch_adverse+1,epochs,1):
+                start_epoch_adverse+=1
+        for epoch in range(start_epoch_adverse,epochs,1):
             start=timer() #start a timer to time the epoch
             gen_training=True
             disc_training=True
