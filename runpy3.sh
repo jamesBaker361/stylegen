@@ -22,6 +22,8 @@
 
 #SBATCH --error=slurm/gpu/%j.err   # STDERR output file (optional)
 
+#SBATCH --exclude=cuda001
+
 day=$(date +'%m/%d/%Y %R')
 echo $@
 echo ${day} $SLURM_JOBID "node_list" $SLURM_NODELIST $@  "\n" >> jobs.txt

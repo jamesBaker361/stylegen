@@ -82,17 +82,17 @@ def data_gen_slow_labels(blocks,flat_list,one_hot):
     def _data_gen_slow_labels():
         vgg=vgg_layers(blocks)
         for path in flat_list:
-            npz_object=np.load(path)
-            features=npz_object['features']
-            ''' these should all be no_block but technically they COULD be any block
-            like it would be redundant to run a the output of  a feature layer through vgg but we could
-            '''
-            features=tf.keras.applications.vgg19.preprocess_input(features)
-            artistic_style_encoding=one_hot.transform([[str(npz_object['style'])]]).toarray()[0]
-            if len(blocks)==1:
-                yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
-            else:
-                yield tuple([f[0] for f in vgg(features)]+[artistic_style_encoding])
+            with np.load(path) as npz_object:
+                features=npz_object['features']
+                ''' these should all be no_block but technically they COULD be any block
+                like it would be redundant to run a the output of  a feature layer through vgg but we could
+                '''
+                features=tf.keras.applications.vgg19.preprocess_input(features)
+                artistic_style_encoding=one_hot.transform([[str(npz_object['style'])]]).toarray()[0]
+                if len(blocks)==1:
+                    yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
+                else:
+                    yield tuple([f[0] for f in vgg(features)]+[artistic_style_encoding])
     return _data_gen_slow_labels
 
 

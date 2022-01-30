@@ -51,6 +51,7 @@ CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artist
 GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
 OUTPUT_BLOCKS=[BLOCK,block2_conv1]
+NORM='instance'
 
 
 
@@ -79,6 +80,7 @@ if __name__=='__main__':
     conditional_str='conditional'
     gamma_str='gamma'
     output_blocks_str='output_blocks'
+    norm_str='norm'
 
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
@@ -102,6 +104,7 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(conditional_str),help='whether to make it a conditional GAN or not',type=bool)
     parser.add_argument('--{}'.format(gamma_str),help='gamma coefficient on classificon  loss',type=float)
     parser.add_argument('--{}'.format(output_blocks_str), nargs='+', default=[])
+    parser.add_argument('--{}'.format(norm_str), help='instance batch or group',type=str)
 
     args = parser.parse_args()
 
@@ -149,6 +152,8 @@ if __name__=='__main__':
         GAMMA=arg_vars[gamma_str]
     if arg_vars[output_blocks_str] is not None:
         OUTPUT_BLOCKS=arg_vars[output_blocks_str]
+    if arg_vars[norm_str] is not None:
+        NORM=arg_vars[norm_str].strip()
         
     try:
         OUTPUT_BLOCKS.remove(BLOCK)
@@ -286,9 +291,9 @@ if __name__=='__main__':
             flat_latent_dim=base_flat_noise_dim
         if CONDITIONAL == True:
             flat_latent_dim+=len(art_styles)
-            autoenc=aegen(BLOCK,base_flat_noise_dim=base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK])
+            autoenc=aegen(BLOCK,base_flat_noise_dim=base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM)
         else:
-            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK])
+            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
         discs=[conv_discrim(b,len(art_styles))for b in OUTPUT_BLOCKS]
 
@@ -542,7 +547,7 @@ if __name__=='__main__':
                     print('successfully loaded discriminator from epoch {}'.format(start_epoch_disc))
         start_epoch_adverse=0
         gen_ckpt_paths=get_checkpoint_paths(check_dir_gen)
-        if len(gen_ckpt_paths)>0 and NO_LOAD==False and LOAD_GEN==True:
+        if len(gen_ckpt_paths)>0 and NO_LOAD==False: # and LOAD_GEN==True:
             most_recent_gen,start_epoch_adverse=get_ckpt_epoch_from_paths(gen_ckpt_paths)
             while 'cp.ckpt.index' not in set(os.listdir(most_recent_gen)):
                 new_start_epoch=max(0,start_epoch_adverse-1)
