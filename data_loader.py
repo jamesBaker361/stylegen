@@ -35,12 +35,13 @@ def data_gen_slow(blocks,flat_list):
     def _data_gen_slow():
         vgg=vgg_layers(blocks)
         for path in flat_list:
-            features=np.load(path)['features']
-            ''' these should all be no_block but technically they COULD be any block
-            like it would be redundant to run a the output of  a feature layer through vgg but we could
-            '''
-            features=tf.keras.applications.vgg19.preprocess_input(features)
-            yield tuple([f for f in vgg(features)])
+            with np.load(path) as npz_object:
+                features=npz_object['features']
+                features=tf.keras.applications.vgg19.preprocess_input(features)
+                if len(blocks)==1:
+                    yield tuple([f for f in vgg(features)])
+                else:
+                    yield tuple([f[0] for f in vgg(features)])
     return _data_gen_slow
 
 def get_dataset_gen_slow(blocks,batch_size,limit=5000,styles=all_styles,genres=all_genres_art):
@@ -138,7 +139,16 @@ def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real
 
 if __name__=='__main__':
     print('balls')
-    styles=["baroque","romanticism","northern-rennaissance"]
-    dataset,one_hot=get_dataset_gen_slow_labels([no_block],3,limit=5,styles=styles)
+    styles=all_styles
+    one_hot=OneHotEncoder()
+    one_hot.fit([[s] for s in styles])
+    mean_dict={b:0 for b in all_blocks}
+    var_dict={b:0 for b in all_blocks}
+    dataset=get_dataset_gen_slow(all_blocks,10,limit=80000,styles=styles)
     for d in dataset:
-        print(d)
+        for t,block in zip(d,all_blocks):
+            #print("shape ", t.shape,"mean ",tf.reduce_mean(t),"std ",tf.math.reduce_std(t))
+            mean_dict[block]+=tf.reduce_mean(t)
+            var_dict[block]+=tf.math.reduce_variance(t)
+    for b in all_blocks:
+        print("mean", mean_dict[b]/80000, "var",var_dict[b]/80000)

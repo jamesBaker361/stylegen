@@ -46,7 +46,7 @@ NO_LOAD=False #whether to load pretrained models
 RESIDUAL=True #whether to use resnext layers in the AEGEN
 ATTENTION=True #whether to use attn block layers in the AEGEN
 DIVERSITY=True #whether to optimize generator to care about diversity
-BETA=0.00025 #beta coefficient on diversity term
+BETA=0.000001 #beta coefficient on diversity term
 CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artistic style labels as input to the flat generator
 GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
@@ -145,6 +145,8 @@ if __name__=='__main__':
         DIVERSITY=False
     if arg_vars[beta_str] is not None:
         BETA=arg_vars[beta_str]
+        if BETA==0:
+            DIVERSITY=False
     if arg_vars[conditional_str] is not None:
         CONDITIONAL=True
         FLAT=True
@@ -330,7 +332,7 @@ if __name__=='__main__':
         disc_loss_list=[]
         diversity_loss_list=[]
         class_label_loss_list=[]
-        diversity_batch_size=4
+        diversity_batch_size=3
         
         with tf.GradientTape() as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
 
@@ -341,19 +343,23 @@ if __name__=='__main__':
                 for art_style_encoding in art_style_encoding_list:
                     generic_noise_vector=tf.random.uniform([base_flat_noise_dim])
                     noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
-                noise=tf.concat(noise,axis=0)
+                #noise=tf.concat(noise,axis=0)
             else:
-                noise = tf.random.uniform([batch_size, * noise_dim])
+                noise = [tf.random.uniform([1, * noise_dim]) for _ in range(batch_size)]
             
-            sample_noise=tf.random.uniform([diversity_batch_size, * noise_dim])
+            sample_noise=[tf.random.uniform([1, * noise_dim]) for _ in range(diversity_batch_size)]
             
             diversity_generated_samples=[[] for _ in range(diversity_batch_size)]
             if diversity_training is True:
-                diversity_generated_samples=gen(sample_noise,training=diversity_training)
+                diversity_generated_samples=[gen(sn,training=diversity_training)[1:] for sn in sample_noise]
                 
-            generated_images_list=gen(noise, training=gen_training)
-            
-            for disc,generated_images,authentic_images,samples in zip(discs, generated_images_list,images,diversity_generated_samples):
+            generated_images_list=[gen(n, training=gen_training)[1:] for n in noise]
+            #print(type(discs))
+            #print(type(gen))
+            for disc,generated_images,authentic_images,samples in zip(discs, 
+                                                                      generated_images_list,
+                                                                      images,
+                                                                      diversity_generated_samples):
                 real_output,real_labels = disc(authentic_images, training=disc_training) 
                 fake_output,fake_labels = disc(generated_images, training=disc_training)
                 
@@ -363,16 +369,24 @@ if __name__=='__main__':
                 if diversity_training == True:
                     div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
                     div_loss*=BETA
+                    div_loss=tf.cast(div_loss,tf.float32)
                     diversity_loss_list.append(div_loss)
                 else:
-                    diversity_loss_list.append(tf.constant(0.0))
+                    diversity_loss_list.append(tf.constant(0.0,dtype=tf.float32))
 
-                class_label_loss=tf.constant(0.0)
-                gen_class_label_loss=tf.constant(0.0)
-                disc_class_label_loss=tf.constant(0.0)
+                class_label_loss=tf.constant(0.0,dtype=tf.float32)
+                gen_class_label_loss=tf.constant(0.0,dtype=tf.float32)
+                disc_class_label_loss=tf.constant(0.0,dtype=tf.float32)
 
                 combined_loss=gen_loss #this is going to be gen_loss and/or diversity loss and classification loss
-
+                
+                for name,t in zip(['combined_loss','gen_loss','div_loss'],[combined_loss,gen_loss,div_loss]):
+                    pass
+                    print(name, t)
+                    
+                for name,boolean in zip(['gen_training','diversity_training','gamma','conditional'],[gen_training,diversity_training,GAMMA,CONDITIONAL]):
+                    print(name,boolean)
+                
                 if gen_training == True:
                     combined_loss=gen_loss
                 if diversity_training == True:
@@ -457,6 +471,10 @@ if __name__=='__main__':
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
         check_dir_disc_list=['./{}/{}/{}/{}'.format(checkpoint_dir,name,'disc',b) for b in OUTPUT_BLOCKS]
         picture_dir='./{}/{}'.format(gen_img_dir,name)
+        intermediate_model=gen.get_layer('decoder')
+        interm_noise_dim=intermediate_model.input.shape
+        if interm_noise_dim[0]==None:
+            interm_noise_dim=interm_noise_dim[1:]
         for d in [check_dir_gen,picture_dir,check_dir_auto]:
             if not os.path.exists(d):
                 os.makedirs(d)
@@ -495,6 +513,17 @@ if __name__=='__main__':
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
                 autoenc.save_weights(save_dir+'cp.ckpt')
+                
+                
+                if picture is True: #creates generated images
+                    for suffix in ['i','ii','iii']:
+                        noise = tf.random.uniform([1, *interm_noise_dim])
+                        gen_img=intermediate_model(noise).numpy()[0]
+                        new_img_path='{}/ae_epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
+                        cv2.imwrite(new_img_path,gen_img)
+                        print('the file exists == {}'.format(os.path.exists(new_img_path)))
+                
+                
             if GRAPH_LOSS==True and len(avg_auto_loss_history)>0:
                 data_to_csv(name,'auto',avg_auto_loss_history)
         avg_disc_loss_history=[]
@@ -524,11 +553,6 @@ if __name__=='__main__':
                                 os.makedirs(save_dir)
                             disc.save_weights(save_dir+'cp.ckpt')
         print('training')
-        #the intermediate model is used to generate the images
-        intermediate_model=gen.get_layer('decoder')
-        interm_noise_dim=intermediate_model.input.shape
-        if interm_noise_dim[0]==None:
-            interm_noise_dim=interm_noise_dim[1:]
         print('interm_noise_dim ',interm_noise_dim)
         print('intermediate model loaded')
         for disc,check_dir_disc in zip(discs,check_dir_disc_list):
@@ -569,7 +593,8 @@ if __name__=='__main__':
             avg_disc_loss=0.0
             avg_diversity_loss=0.0
             avg_class_loss=0.0
-            for i,images in enumerate(dataset):
+            i=0
+            for images in dataset:
                 #for images in image_tuples:
                 disc_loss,gen_loss,div_loss,class_label_loss=train_step_dist(images,gen_training,disc_training,diversity_training,one_hot=one_hot)
                 if i%100==0: #print out the loss every 100 batches
@@ -578,6 +603,7 @@ if __name__=='__main__':
                 avg_disc_loss+=disc_loss/LIMIT
                 avg_diversity_loss+=div_loss/LIMIT
                 avg_class_loss+=class_label_loss/LIMIT
+                i+=1
             end=timer()
             avg_disc_loss_history.append(avg_disc_loss)
             avg_gen_loss_history.append(avg_gen_loss)
