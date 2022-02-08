@@ -32,7 +32,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 EPOCHS=2 #how mnay epochs to train generator and discriminator for
 AE_EPOCHS=0 #how many epochs to pre train autoencoder for
-BATCH_SIZE_PER_REPLICA=1 #batch size per gpu
+BATCH_SIZE_PER_REPLICA=2 #batch size per gpu
 LIMIT=10 #how many images in total dataset
 PRE_EPOCHS=0 #how many epochs to pretrain discriminator on
 NAME='testing'
@@ -50,7 +50,8 @@ BETA=0.00025 #beta coefficient on diversity term
 CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artistic style labels as input to the flat generator
 GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
-OUTPUT_BLOCKS=[BLOCK,block2_conv1]
+OUTPUT_BLOCKS=[BLOCK]
+NORM='instance'
 
 
 
@@ -79,6 +80,7 @@ if __name__=='__main__':
     conditional_str='conditional'
     gamma_str='gamma'
     output_blocks_str='output_blocks'
+    norm_str='norm'
 
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
@@ -102,6 +104,7 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(conditional_str),help='whether to make it a conditional GAN or not',type=bool)
     parser.add_argument('--{}'.format(gamma_str),help='gamma coefficient on classificon  loss',type=float)
     parser.add_argument('--{}'.format(output_blocks_str), nargs='+', default=[])
+    parser.add_argument('--{}'.format(norm_str), help='instance batch or group',type=str)
 
     args = parser.parse_args()
 
@@ -149,6 +152,8 @@ if __name__=='__main__':
         GAMMA=arg_vars[gamma_str]
     if arg_vars[output_blocks_str] is not None:
         OUTPUT_BLOCKS=arg_vars[output_blocks_str]
+    if arg_vars[norm_str] is not None:
+        NORM=arg_vars[norm_str].strip()
         
     try:
         OUTPUT_BLOCKS.remove(BLOCK)
@@ -254,8 +259,11 @@ if __name__=='__main__':
         def diversity_loss_from_samples_and_noise(samples,noise):
             '''based off of https://arxiv.org/abs/1901.09024
             '''
-            batch_size=len(samples)
-            loss=0 #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
+            try:
+                batch_size=len(samples)
+            except TypeError:
+                batch_size=samples.shape[0]
+            loss=tf.constant(0.0,dtype=tf.float32) #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
             for i in range(batch_size):
                 for j in range(i+1,batch_size):
                     loss+=tf.norm(samples[i]-samples[j])/tf.norm(noise[i]-noise[j])
@@ -286,9 +294,9 @@ if __name__=='__main__':
             flat_latent_dim=base_flat_noise_dim
         if CONDITIONAL == True:
             flat_latent_dim+=len(art_styles)
-            autoenc=aegen(BLOCK,base_flat_noise_dim=base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK])
+            autoenc=aegen(BLOCK,base_flat_noise_dim=base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM)
         else:
-            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK])
+            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
         discs=[conv_discrim(b,len(art_styles))for b in OUTPUT_BLOCKS]
 
@@ -327,6 +335,9 @@ if __name__=='__main__':
         class_label_loss_list=[]
         diversity_batch_size=4
         
+        print('len discsk',len(discs))
+        print('bath size',batch_size)
+        
         with tf.GradientTape() as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
 
             if CONDITIONAL == True:
@@ -336,21 +347,37 @@ if __name__=='__main__':
                 for art_style_encoding in art_style_encoding_list:
                     generic_noise_vector=tf.random.uniform([base_flat_noise_dim])
                     noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
-                noise=tf.concat(noise,axis=0)
+                #noise=tf.concat(noise,axis=0)
             else:
                 noise = tf.random.uniform([batch_size, * noise_dim])
             
             sample_noise=tf.random.uniform([diversity_batch_size, * noise_dim])
             
-            diversity_generated_samples=[[] for _ in range(diversity_batch_size)]
+            diversity_generated_samples=[[] for _ in range(batch_size)]
             if diversity_training is True:
                 diversity_generated_samples=gen(sample_noise,training=diversity_training)
                 
             generated_images_list=gen(noise, training=gen_training)
             
+            if len(discs)==1:
+                generated_images_list=[generated_images_list]
+                diversity_generated_samples=[diversity_generated_samples]
+            
             for disc,generated_images,authentic_images,samples in zip(discs, generated_images_list,images,diversity_generated_samples):
+                '''print(disc.input_shape)
+                for v in [generated_images,authentic_images,samples,sample_noise]:
+                    pass
+                    try:
+                        print(v.shape)
+                    except AttributeError:
+                        print(len(v),end=',')
+                        for t in v:
+                            print(t.shape,end=' , ')
+                        print('nice')'''
                 real_output,real_labels = disc(authentic_images, training=disc_training) 
                 fake_output,fake_labels = disc(generated_images, training=disc_training)
+                
+                #print(real_output)
                 
                 gen_loss= generator_loss(fake_output)
                 disc_loss = discriminator_loss(real_output, fake_output)
