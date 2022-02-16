@@ -19,7 +19,7 @@ def data_to_csv(name,model_type,data):
         os.makedirs(save_dir)
     with open('{}/{}.csv'.format(save_dir,model_type), 'a+', newline='') as csvfile:
         wrtr=csv.writer(csvfile)
-        wrtr.writerows([ [d] for d in data])
+        wrtr.writerow(data)
 
 
 def line_graph(name,model_type,data):

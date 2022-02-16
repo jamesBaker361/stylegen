@@ -345,13 +345,13 @@ if __name__=='__main__':
                 art_style_encoding_list=[tf.convert_to_tensor(one_hot.transform([[art_style]]).toarray(), dtype=tf.float32)[0] for art_style in random_art_styles]
                 noise=[]
                 for art_style_encoding in art_style_encoding_list:
-                    generic_noise_vector=tf.random.uniform([base_flat_noise_dim])
+                    generic_noise_vector=tf.random.normal([base_flat_noise_dim])
                     noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
                 #noise=tf.concat(noise,axis=0)
             else:
-                noise = tf.random.uniform([batch_size, * noise_dim])
+                noise = tf.random.normal([batch_size, * noise_dim])
             
-            sample_noise=tf.random.uniform([diversity_batch_size, * noise_dim])
+            sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
             
             diversity_generated_samples=[[] for _ in range(batch_size)]
             if diversity_training is True:
@@ -569,7 +569,7 @@ if __name__=='__main__':
                     print('successfully loaded discriminator from epoch {}'.format(start_epoch_disc))
         start_epoch_adverse=0
         gen_ckpt_paths=get_checkpoint_paths(check_dir_gen)
-        if len(gen_ckpt_paths)>0 and NO_LOAD==False and LOAD_GEN==True:
+        if len(gen_ckpt_paths)>0 and NO_LOAD==False:
             most_recent_gen,start_epoch_adverse=get_ckpt_epoch_from_paths(gen_ckpt_paths)
             while 'cp.ckpt.index' not in set(os.listdir(most_recent_gen)):
                 new_start_epoch=max(0,start_epoch_adverse-1)
@@ -640,7 +640,7 @@ if __name__=='__main__':
                         collage.append(cv2.hconcat(row))
                     gen_img_collage=cv2.vconcat(collage)
                     '''
-                    noise = tf.random.uniform([1, *interm_noise_dim])
+                    noise = tf.random.normal([1, *interm_noise_dim])
                     gen_img=intermediate_model(noise).numpy()[0]
                     new_img_path='{}/epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
                     cv2.imwrite(new_img_path,gen_img)
