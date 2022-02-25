@@ -16,7 +16,7 @@
 
 #SBATCH --gres=gpu:4
 
-#SBATCH --time=1-12:00:00           # Total run time limit (D-HH:MM:SS)
+#SBATCH --time=3-00:00:00           # Total run time limit (D-HH:MM:SS)
 
 #SBATCH --output=slurm/gpu/%j.out  # STDOUT output file
 

@@ -19,46 +19,82 @@ from generator import *
  #the dim of latent space is dim is 1-D
 
 def get_encoder(inputs,input_dim,residual,attention,m=3,base_flat_noise_dim=0,norm="instance"):
+        
     normalization=InstanceNormalization
     if norm == "batch":
         normalization=BatchNormalization
     elif norm == "group":
         normalization=GroupNormalization
+        
+    def block(x,channels):
+        x= layers.Conv2D(channels, (4, 4), (1, 1), padding='same')(x)
+        x=normalization()(x)
+        ##x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+        x=layers.Conv2D(channels,(2,2),padding='same')(x)
+        x=normalization()(x)
+        ##x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+        return x
     #inputs = tk.Input(shape=input_dim)
     x = layers.Conv2D(max(8,input_dim[-1]), (1, 1), (1, 1))(inputs)
     x=normalization()(x)
-    x=layers.Dropout(.2)(x)
+    ##x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
     if residual==True:
         x = ResNextBlock(kernel_size=(4, 4))(x)
-    x = layers.Conv2D(32, (1, 1), (1, 1))(x)
+    '''x = layers.Conv2D(32, (1, 1), (1, 1))(x)
     x=normalization()(x)
-    x=layers.Dropout(.2)(x)
-    x=layers.LeakyReLU()(x)
-    for _ in range(m):
+    ##x=layers.Dropout(.2)(x)
+    x=layers.LeakyReLU()(x)'''
+    
+    while x.shape[-1]<64:
         channels = x.shape[-1] *2
+        x=block(x, channels)
+    
+    while x.shape[-1]>64:
+        channels = x.shape[-1] //2
+        x=block(x, channels)
+    '''
+    for _ in range(m):
+        channels = min(128,x.shape[-1] *2)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
+        #print(x.shape)
+        if x.shape[-2]>16:
+            x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
+        else:
+            x= layers.Conv2D(channels, (4, 4), (1, 1), padding='same')(x)
+        x=normalization()(x)
+        ##x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+        if residual==True:
+            x = ResNextBlock(kernel_size=(4, 4))(x)
+        x=normalization()(x)
+        ##x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+        x=layers.Conv2D(channels,(3,3),padding='same')(x)
+        x=normalization()(x)
+        ##x=layers.Dropout(.2)(x)
+        x=layers.LeakyReLU()(x)
+    '''
+    while x.shape[-2] >2:
+        channels = x.shape[-1]
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
         #print(x.shape)
         x = layers.Conv2D(channels, (4, 4), (2, 2), padding='same')(x)
         x=normalization()(x)
-        x=layers.Dropout(.2)(x)
+        ##x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
+        x=layers.Conv2D(channels,(2,2),padding='same')(x)
         x=normalization()(x)
-        x=layers.Dropout(.2)(x)
+        ##x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
-        x=layers.Conv2D(channels,(3,3),padding='same')(x)
-        x=normalization()(x)
-        x=layers.Dropout(.2)(x)
-        x=layers.LeakyReLU()(x)
-    if residual==True:
-        x = ResNextBlock(kernel_size=(4, 4))(x)
-    if attention==True:
-        x = attn_block(x)
-    if residual==True:
-        x = ResNextBlock(kernel_size=(4, 4))(x)
+        
+    
     x = GroupNormalization()(x)
     x = tk.activations.swish(x)
     if base_flat_noise_dim>0:
@@ -80,19 +116,24 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
         x=layers.Reshape(new_shape,name='decoder_reshape_')(x)
     if residual==True:
         x = ResNextBlock(kernel_size=(4, 4))(x)
+    x = layers.Conv2D(x.shape[-1], (1, 1), (1, 1))(x)
+    x=normalization()(x)
+    ##x=layers.Dropout(.2)(x)
+    x=layers.LeakyReLU()(x)
     while x.shape[-2]<256:
         channels = max(x.shape[-1]//2,32)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
         x = layers.Conv2DTranspose(channels, (4, 4), (2, 2),padding='same')(x)
         x=normalization()(x)
-        x=layers.Dropout(.2)(x)
+        ##x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
         x=normalization()(x)
-        x=layers.Dropout(.2)(x)
+        ##x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
+    x = layers.Conv2D(x.shape[-1], (1, 1), (1, 1))(x)
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)
     x = tk.activations.swish(x)
     x = layers.Conv2D(3, (1, 1), (1, 1))(x)
