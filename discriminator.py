@@ -35,13 +35,14 @@ def conv_discrim(block,labels=0):
         x= layers.Conv2D(x.shape[-1] //2,(4,4),(2,2),padding='same')(x)
         x=layers.BatchNormalization()(x)
         x=layers.LeakyReLU()(x)
-        x = ResNextBlock(kernel_size=(4, 4))(x)
-        x=layers.BatchNormalization()(x)
-        x=layers.LeakyReLU()(x)
+        #x = ResNextBlock(kernel_size=(4, 4))(x)
+        #x=layers.BatchNormalization()(x)
+        #x=layers.LeakyReLU()(x)
 
     x=layers.Flatten()(x)
     z = layers.Dense(8)(x)
     z=layers.BatchNormalization()(z)
+    z=layers.LeakyReLU()(z)
     z = layers.Dense(1,activation='sigmoid')(z)
 
     if labels>0:#adds classification head

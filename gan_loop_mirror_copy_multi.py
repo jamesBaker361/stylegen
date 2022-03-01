@@ -81,6 +81,7 @@ if __name__=='__main__':
     gamma_str='gamma'
     output_blocks_str='output_blocks'
     norm_str='norm'
+    ukiyo_str='ukiyo'
 
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
@@ -105,6 +106,7 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(gamma_str),help='gamma coefficient on classificon  loss',type=float)
     parser.add_argument('--{}'.format(output_blocks_str), nargs='+', default=[])
     parser.add_argument('--{}'.format(norm_str), help='instance batch or group',type=str)
+    parser.add_argument('--{}'.format(ukiyo_str),help='whether to only use ukiyo art',type=bool)
 
     args = parser.parse_args()
 
@@ -191,6 +193,8 @@ if __name__=='__main__':
         art_styles=['baroque','romanticism']
     elif arg_vars[renn_str] is not None:
         art_styles=['early-renaissance','high-renaissance','mannerism-late-renaissance','northern-renaissance']
+    elif arg_vars[ukiyo_str] is not None:
+        art_styles=['ukiyo-e']
 
     #global one_hot
     one_hot=OneHotEncoder()
