@@ -4,8 +4,6 @@
 
 #SBATCH --requeue                 # Return job to the queue if preempted
 
-#SBATCH --job-name=jlb638job     # Assign a short name to your job
-
 #SBATCH --nodes=1                 # Number of nodes you require
 
 #SBATCH --ntasks=1                # Total # of tasks across all nodes

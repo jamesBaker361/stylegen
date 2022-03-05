@@ -29,12 +29,14 @@ def conv_discrim(block,labels=0):
     x= layers.Conv2D(conv1_dim,(4,4),(2,2),padding='same')(inputs)
     x=layers.BatchNormalization()(x)
     x=layers.LeakyReLU()(x)
+    x=layers.Dropout(.2)(x)
 
     for _ in range(3):
         x = ResNextBlock(kernel_size=(4, 4))(x)
         x= layers.Conv2D(x.shape[-1] //2,(4,4),(2,2),padding='same')(x)
         x=layers.BatchNormalization()(x)
         x=layers.LeakyReLU()(x)
+        x=layers.Dropout(.2)(x)
         #x = ResNextBlock(kernel_size=(4, 4))(x)
         #x=layers.BatchNormalization()(x)
         #x=layers.LeakyReLU()(x)
