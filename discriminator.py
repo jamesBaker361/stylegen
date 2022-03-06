@@ -1,16 +1,16 @@
 import tensorflow as tf
 import tensorflow.keras as tk
-from tensorflow.keras import layers,Model
-import string
+from tensorflow.keras import layers
 
 from group_norm import GroupNormalization
 from resnext import ResNextBlock
 
 from data_processing import vgg_layers
+from generator import *
 
 from other_globals import *
 
-def conv_discrim(block,labels=0):
+def conv_discrim(block,labels=0,attention=False):
     """[summary]
 
     Args:
@@ -30,6 +30,8 @@ def conv_discrim(block,labels=0):
     x=layers.BatchNormalization()(x)
     x=layers.LeakyReLU()(x)
     x=layers.Dropout(.2)(x)
+    if attention==True:
+        x=attn_block(x)
 
     for _ in range(3):
         x = ResNextBlock(kernel_size=(4, 4))(x)
@@ -41,6 +43,8 @@ def conv_discrim(block,labels=0):
         #x=layers.BatchNormalization()(x)
         #x=layers.LeakyReLU()(x)
 
+    if attention==True:
+        x=attn_block(x)
     x=layers.Flatten()(x)
     z = layers.Dense(8)(x)
     z=layers.BatchNormalization()(z)

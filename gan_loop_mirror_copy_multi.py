@@ -302,7 +302,7 @@ if __name__=='__main__':
         else:
             autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
-        discs=[conv_discrim(b,len(art_styles))for b in OUTPUT_BLOCKS]
+        discs=[conv_discrim(b,len(art_styles),attention=ATTENTION) for b in OUTPUT_BLOCKS]
 
         noise_dim=gen.input.shape
         if FLAT==False and len(noise_dim)!=3:

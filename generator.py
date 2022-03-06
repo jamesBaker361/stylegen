@@ -79,7 +79,7 @@ class NinLayer(layers.Layer):
 
 def attn_block(x):
     B, H, W, C = x.shape
-    h = GroupNormalization()(x)
+    h = GroupNormalization(groups=C//4)(x)
     q = NinLayer(C)(h)
     k = NinLayer(C)(h)
     v = NinLayer(C)(h)
