@@ -43,8 +43,6 @@ def get_encoder(inputs,input_dim,residual,attention,m=3,base_flat_noise_dim=0,no
     x=layers.LeakyReLU()(x)
     if residual==True:
         x = ResNextBlock(kernel_size=(4, 4))(x)
-    if attention==True:
-        x=attn_block(x)
     '''x = layers.Conv2D(32, (1, 1), (1, 1))(x)
     x=normalization()(x)
     ##x=layers.Dropout(.2)(x)
@@ -130,17 +128,17 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
         x=layers.LeakyReLU()(x)
         if residual==True:
             x = ResNextBlock(kernel_size=(4, 4))(x)
-        x=normalization()(x)
-        ##x=layers.Dropout(.2)(x)
-        x=layers.LeakyReLU()(x)
+        if x.shape[-2]<64 and attention==True:
+            x=attn_block(x)
     x = layers.Conv2D(x.shape[-1], (8, 8), (1, 1),padding='same')(x)
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)
     x = tk.activations.swish(x)
     x = layers.Conv2D(8, (8, 8), (1, 1),padding='same')(x)
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)
     x = tk.activations.swish(x)
-    if attention==True:
-        x=attn_block(x)
+    x = layers.Conv2D(4, (4, 4), (1, 1),padding='same')(x)
+    x = GroupNormalization(groups=x.shape[-1] // 4)(x)
+    x = tk.activations.swish(x)
     x = layers.Conv2D(3, (4, 4), (1, 1),padding='same')(x)
     x=layers.Activation('sigmoid')(x)
     x=Rescaling(255,name='img_output')(x)

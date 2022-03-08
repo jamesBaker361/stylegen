@@ -32,7 +32,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 EPOCHS=2 #how mnay epochs to train generator and discriminator for
 AE_EPOCHS=0 #how many epochs to pre train autoencoder for
-BATCH_SIZE_PER_REPLICA=2 #batch size per gpu
+BATCH_SIZE_PER_REPLICA=1 #batch size per gpu
 LIMIT=10 #how many images in total dataset
 PRE_EPOCHS=0 #how many epochs to pretrain discriminator on
 NAME='testing'
