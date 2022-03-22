@@ -12,6 +12,17 @@ from string_globals import *
 from other_globals import *
 
 def load_img(path_to_img, max_dim=256):
+    '''Loads the image from the given path, scales it to a square, and randomly crops a square of the given
+    max dimension
+    
+    Parameters
+    ----------
+    path_to_img
+        the path to the image you want to load.
+    max_dim, optional
+        The maximum dimension of the image.
+    
+    '''
     img = tf.io.read_file(path_to_img)
     img = tf.image.decode_image(img, channels=3)
     img = tf.image.convert_image_dtype(img, tf.float32)
@@ -28,6 +39,20 @@ def load_img(path_to_img, max_dim=256):
     return img
 
 def load_img2(path_to_img,max_dim=256):
+    '''Loads an image from a file path, resizes it to a max_dim, and then converts it to a numpy array
+    
+    Parameters
+    ----------
+    path_to_img
+        the path to the image you want to load.
+    max_dim, optional
+        the max image size in pixels
+    
+    Returns
+    -------
+        an image array of the loaded image.
+    
+    '''
     image_array=cv2.imread(path_to_img)
     h,w,c=image_array.shape
     scale=max_dim/max(h,w)
@@ -54,6 +79,19 @@ def vgg_layers(layer_names):
     return model
 
 def get_img_paths(artistic_styles=[]):
+    '''Given a list of artistic styles, return a list of all the image paths in the img_dir directory
+    
+    Parameters
+    ----------
+    artistic_styles
+        A list of the artistic style you want to use. If this is empty, it will use all the styles in the
+    folder.
+    
+    Returns
+    -------
+        A list of strings, where each string is the path to an image.
+    
+    '''
     all_imgs=[]
     if artistic_styles==[]:
         artistic_styles=[s for s in os.listdir(img_dir) if s[0]!='.']

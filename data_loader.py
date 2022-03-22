@@ -32,6 +32,22 @@ def get_all_img_paths(block,styles,genres): #gets all image path of images of st
     return ret
 
 def data_gen_slow(blocks,flat_list):
+    '''This function takes in a list of paths to numpy arrays that contain the features of the images. 
+    It then takes those features and runs them through the vgg19 model and returns the output of the
+    model.
+    
+    Parameters
+    ----------
+    blocks
+        A list of the layers to be used in the model.
+    flat_list
+        list of paths to numpy files
+    
+    Returns
+    -------
+        A function that returns a generator that yields a tuple of tensors.
+    
+    '''
     def _data_gen_slow():
         vgg=vgg_layers(blocks)
         for path in flat_list:
@@ -123,6 +139,23 @@ def get_dataset_gen_slow_labels(blocks,batch_size, one_hot,limit=5000,styles=all
     return tf.data.Dataset.from_generator(gen,output_signature=output_sig_shapes).batch(batch_size,drop_remainder=True)
 
 def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real dataset to compare to generated images for FID
+    '''It takes a block and a list of styles, and returns a tensor of real images
+    
+    Parameters
+    ----------
+    block
+        the block of the dataset to use.
+    styles
+        a list of style names to use for the generated images. If this is empty, then the style will be
+    randomly selected from the style folder.
+    limit, optional
+        the number of images to use for the dataset. If set to 0, all images will be used.
+    
+    Returns
+    -------
+        a tensor of shape (1000,64,64,3)
+    
+    '''
     if len(styles)==0:
         styles=[s for s in os.listdir('{}/{}'.format(npz_root,block)) if s[0]!='.']
     flat_list=get_all_img_paths(no_block,styles)

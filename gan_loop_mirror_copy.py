@@ -256,7 +256,8 @@ if __name__=='__main__':
         if FLAT==True:
             flat_latent_dim=base_flat_noise_dim
         if CONDITIONAL == True:
-            flat_latent_dim+=len(art_styles)
+            flat_latent_dim+=len# 
+            (art_styles)
             autoenc=aegen(BLOCK,base_flat_noise_dim=base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,output_blocks=output_blocks,art_styles=art_styles)
         else:
             autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=output_blocks)
