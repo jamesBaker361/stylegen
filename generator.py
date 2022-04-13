@@ -20,12 +20,45 @@ noise_dim_dcgan=(256,256,3)
 
 
 def _einsum(a, b, c, x, y):
+    '''It performs a tensor contraction between tensors x and y along the specified axes.
+    
+    Parameters
+    ----------
+    a
+        The subscripts for the input tensor x.
+    b
+        The batch size.
+    c
+        The number of output channels.
+    x
+        The input to the network.
+    y
+        The output tensor.
+    
+    Returns
+    -------
+        The output of the einsum operation.
+    
+    '''
     einsum_str = '{},{}->{}'.format(''.join(a), ''.join(b), ''.join(c))
     return tf.einsum(einsum_str, x, y)
 
 
 def contract_inner(x, y):
-    """tensordot(x, y, 1)."""
+    '''It performs a contraction between the last axis of x and the first axis of y.
+    
+    Parameters
+    ----------
+    x
+        The input tensor.
+    y
+        The tensor to be multiplied.
+    
+    Returns
+    -------
+        The result of the contraction of the two tensors.
+    
+    '''
     x_chars = list(string.ascii_lowercase[:len(x.shape)])
     y_chars = list(string.ascii_uppercase[:len(y.shape)])
     assert len(x_chars) == len(x.shape) and len(y_chars) == len(y.shape)
@@ -42,17 +75,28 @@ def default_init(scale):
 
 
 def nin(x, num_units, init_scale=1.0):
+    '''It performs a linear transformation on the input tensor.
+    
+    Parameters
+    ----------
+    x
+        The input tensor.
+    num_units
+        the number of units in the dense layer.
+    init_scale
+        The scale of the weight initialization.
+    
+    Returns
+    -------
+        The output of the NIN layer.
+    
+    '''
     in_dim = int(x.shape[-1])
     w_init = default_init(init_scale)
     b_init = tk.initializers.Zeros()
     W = tf.Variable(w_init(shape=[in_dim, num_units]), name='W')
     b = tf.Variable(b_init(shape=[num_units]), name='b')
     y = contract_inner(x, W) + b
-    '''print(y.shape)
-    print(x.shape[:-1]+[num_units])
-    x_shape=x.shape[:-1] + [num_units]
-    print(y.shape,x_shape)
-    assert y.shape == x_shape'''
     return y
 
 
@@ -158,10 +202,6 @@ def dcgen(block,m=4):
     x=layers.BatchNormalization()(x)
     x=layers.Dropout(.2)(x)
     x=layers.LeakyReLU()(x)
-    '''
-    x=layers.Dense(4*4*1024,use_bias=False)(inputs)
-    x=layers.Reshape((4,4,1024))(x)
-    '''
     for _ in range(m):
         channels = x.shape[-1] // 2
         x = ResNextBlock(kernel_size=(4, 4))(x)
