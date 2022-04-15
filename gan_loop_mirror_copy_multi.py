@@ -207,6 +207,18 @@ if __name__=='__main__':
         categorical_cross_entropy=tf.keras.losses.CategoricalCrossentropy(from_logits=True,reduction=tf.keras.losses.Reduction.NONE)
         
         def gram_matrix(input_tensor):
+            '''It takes a tensor of shape (1, height, width, channels) and computes the Gram matrix of the channels
+            
+            Parameters
+            ----------
+            input_tensor
+                The tensor to calculate the gram matrix for.
+            
+            Returns
+            -------
+                The gram matrix of the input tensor.
+            
+            '''
             result = tf.linalg.einsum('ijc,ijd->cd', input_tensor, input_tensor)
             input_shape = tf.shape(input_tensor)
             num_locations = tf.cast(input_shape[1]*input_shape[2], tf.float32)
@@ -290,7 +302,7 @@ if __name__=='__main__':
         learning_rate_fn = tf.keras.optimizers.schedules.InverseTimeDecay(initial_learning_rate, decay_steps, decay_rate)
 
         autoencoder_optimizer=tf.keras.optimizers.Adam()
-        generator_optimizer = tf.keras.optimizers.Adam()
+        generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
         discriminator_optimizer = tf.keras.optimizers.SGD()
 
         flat_latent_dim=0
