@@ -302,7 +302,7 @@ if __name__=='__main__':
         learning_rate_fn = tf.keras.optimizers.schedules.InverseTimeDecay(initial_learning_rate, decay_steps, decay_rate)
 
         autoencoder_optimizer=tf.keras.optimizers.Adam()
-        generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
+        generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         discriminator_optimizer = tf.keras.optimizers.SGD()
 
         flat_latent_dim=0
