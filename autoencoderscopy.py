@@ -18,9 +18,9 @@ from generator import *
 
  #the dim of latent space is dim is 1-D
 
-def get_encoder(inputs,input_dim,residual,attention,
+def get_encoder(inputs,input_dim,residual,
     noise_weight=1.0,
-    m=3,base_flat_noise_dim=0,norm="instance"):
+    base_flat_noise_dim=0,norm="instance"):
     '''> The encoder takes an input image and returns a vector of size `base_flat_noise_dim`
     
     The encoder is a convolutional neural network that takes an image as input and returns a vector of
@@ -96,8 +96,9 @@ def get_encoder(inputs,input_dim,residual,attention,
         x=normalization()(x)
         ##x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
-    noise=noise_weight*tf.random.normal(x.shape[1:])
-    x=tf.keras.layers.Add()([x,noise])
+    if noise_weight!=0:
+        noise=noise_weight*tf.random.normal(x.shape[1:])
+        x=tf.keras.layers.Add()([x,noise])
 
     if base_flat_noise_dim>0:
         x=layers.Flatten()(x)
@@ -171,7 +172,7 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
     x=Rescaling(255,name='img_output')(x)
     return tk.Model(inputs=inputs,outputs=x,name='decoder')
 
-def full_autoencoder(inputs,block,residual,attention,flat_latent_dim):
+def full_autoencoder(inputs,block,residual,attention,flat_latent_dim,noise_weight):
     '''> The function takes in the inputs, the block, the residual, the attention, and the flat latent
     dimension, and returns the full autoencoder
     
@@ -187,6 +188,8 @@ def full_autoencoder(inputs,block,residual,attention,flat_latent_dim):
         whether to use attention in the encoder and decoder
     flat_latent_dim
         the dimension of the latent space.
+    noise_weight
+        the amount to scale the noise to add to the encoder output.
     
     Returns
     -------
@@ -194,13 +197,13 @@ def full_autoencoder(inputs,block,residual,attention,flat_latent_dim):
     
     '''
     input_shape=input_shape_dict[block]
-    x=get_encoder(inputs,input_shape,residual,attention,flat_latent_dim=flat_latent_dim)
+    x=get_encoder(inputs,input_shape,residual,noise_weight=noise_weight,flat_latent_dim=flat_latent_dim)
     dec=make_decoder(x.shape[1:],residual,attention,flat_latent_dim)
     #x = enc(inputs)
     x=dec(x)
     return x
 
-def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance"):
+def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0):
     '''`aegen` takes in an image, encodes it, adds some noise, decodes it, and then compares the decoded
     image to the original image
     
@@ -220,6 +223,8 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
         a list of strings, each string is the name of a style.
     norm, optional
         "instance" or "batch"
+    noise_weight, optional
+        the amount to scale the noise to add to the encoder output.
     
     Returns
     -------
@@ -230,7 +235,8 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
     inputs = tk.Input(shape=input_shape)
     flat_latent_dim=base_flat_noise_dim+len(art_styles)
     print(inputs.shape)
-    x=get_encoder(inputs,input_shape,residual,attention,base_flat_noise_dim=base_flat_noise_dim,norm=norm)
+    x=get_encoder(inputs,input_shape,residual,
+        noise_weight=noise_weight,base_flat_noise_dim=base_flat_noise_dim,norm=norm)
     if len(art_styles)>0:
         class_inputs=tk.Input(shape=(len(art_styles)))
         x=tf.concat([x,class_inputs],axis=-1)

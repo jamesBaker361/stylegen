@@ -52,6 +52,7 @@ GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0,
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
 OUTPUT_BLOCKS=[BLOCK]
 NORM='instance'
+ENCODER_NOISE=1.0
 
 
 
@@ -82,6 +83,7 @@ if __name__=='__main__':
     output_blocks_str='output_blocks'
     norm_str='norm'
     ukiyo_str='ukiyo'
+    encoder_noise_str='encoder_noise'
 
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train in tandem',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set',type=int)
@@ -107,6 +109,7 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(output_blocks_str), nargs='+', default=[])
     parser.add_argument('--{}'.format(norm_str), help='instance batch or group',type=str)
     parser.add_argument('--{}'.format(ukiyo_str),help='whether to only use ukiyo art',type=bool)
+    parser.add_argument('--{}'.format(encoder_noise_str), help='what to multiply the encoder noise by',type=float)
 
     args = parser.parse_args()
 
@@ -156,6 +159,8 @@ if __name__=='__main__':
         OUTPUT_BLOCKS=arg_vars[output_blocks_str]
     if arg_vars[norm_str] is not None:
         NORM=arg_vars[norm_str].strip()
+    if arg_vars[encoder_noise_str] is not None:
+        ENCODER_NOISE=arg_vars[encoder_noise_str]
         
     try:
         OUTPUT_BLOCKS.remove(BLOCK)
