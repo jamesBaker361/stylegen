@@ -1,11 +1,9 @@
 
 import os
 import sys
-from numpy.core.defchararray import endswith
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
 
-from PIL import Image
 import numpy as np
 import cv2
 from string_globals import *
@@ -102,6 +100,15 @@ def get_img_paths(artistic_styles=[]):
     return all_imgs
 
 def main(blocks):
+    '''It takes a list of layers, and for each layer, it takes all the images in the img_dir, and saves the
+    output of that layer for each image in a .npz file
+    
+    Parameters
+    ----------
+    blocks
+        a list of strings, each of which is a layer in the VGG19 network.
+    
+    '''
     artistic_styles= all_styles #['baroque','early-renaissance','high-renaissance','mannerism-late-renaissance','northern-renaissance','ukiyo-e','rococo','realism','contemporary-realism','color-field-painting']
     count=len(get_img_paths(artistic_styles))
     c=0

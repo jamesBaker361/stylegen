@@ -90,7 +90,7 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(batch_size_replica_str),help='batch size',type=int)
     parser.add_argument('--{}'.format(pretrain_epochs_str),help='epochs to pre train discriminator',type=int)
     parser.add_argument('--{}'.format(name_str),help='name of this versions', type = str)
-    parser.add_argument('--{}'.format(block_str),help='block of vgg we are trying to imitate',type=str)
+    parser.add_argument('--{}'.format(block_str),help='block of vgg we are training autoencoder with',type=str)
     parser.add_argument('--{}'.format(auto_str),help='whetther to use an autoencoder GAN',type=bool)
     parser.add_argument('--{}'.format(fid_str),help='whether to calculate fid score after each epoch',type=str)
     parser.add_argument('--{}'.format(human_str),help='only using the human art',type=bool)
