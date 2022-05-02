@@ -1,6 +1,7 @@
 import os
-
-
+from keras import backend
+import logging
+logging.getLogger('tensorflow').disabled = True
 import tensorflow as tf
 print('tf version ='.format(tf. __version__))
 import sys
@@ -53,7 +54,8 @@ LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
 OUTPUT_BLOCKS=[BLOCK]
 NORM='instance'
 ENCODER_NOISE=1.0
-
+WASSERSTEIN=False #https://machinelearningmastery.com/how-to-code-a-wasserstein-generative-adversarial-network-wgan-from-scratch/
+N_CRITIC=5 #how many times to train the discriminator than the generator
 
 
 if __name__=='__main__':
@@ -84,6 +86,9 @@ if __name__=='__main__':
     norm_str='norm'
     ukiyo_str='ukiyo'
     encoder_noise_str='encoder_noise'
+    wasserstein_str='wasserstein'
+    n_critic_str="n_critic"
+
 
     parser.add_argument('--{}'.format(epochs_str),help='epochs to train generator/discriminators in tandem (int)',type=int)
     parser.add_argument('--{}'.format(limit_str),help='how many images in training set (int)',type=int)
@@ -110,6 +115,8 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(norm_str), help='instance batch or group (str)',type=str)
     parser.add_argument('--{}'.format(ukiyo_str),help='whether to only use ukiyo art (bool)',type=bool)
     parser.add_argument('--{}'.format(encoder_noise_str), help='what to multiply the encoder noise by (float)',type=float)
+    parser.add_argument('--{}'.format(wasserstein_str),help="whether to use wasserstein GAN architecture",type=bool,default=False)
+    parser.add_argument('--{}'.format(n_critic_str),help="how many times to train the discriminator than the generator",type=int,default=5)
 
     args = parser.parse_args()
 
@@ -161,6 +168,8 @@ if __name__=='__main__':
         NORM=arg_vars[norm_str].strip()
     if arg_vars[encoder_noise_str] is not None:
         ENCODER_NOISE=arg_vars[encoder_noise_str]
+    WASSERSTEIN=args.wasserstein
+    N_CRITIC=args.n_critic
         
     try:
         OUTPUT_BLOCKS.remove(BLOCK)
@@ -245,6 +254,16 @@ if __name__=='__main__':
             total_loss = real_loss + fake_loss
             return tf.nn.compute_average_loss(total_loss, global_batch_size=GLOBAL_BATCH_SIZE)
 
+        def discriminator_loss_single(output,label_number):
+            vector=tf.ones_like(output)+tf.random.normal(shape=output.shape,mean=0,stddev=.1)
+            vector=label_number* vector
+            loss=cross_entropy(vector,output)
+            return tf.nn.compute_average_loss(loss, global_batch_size=GLOBAL_BATCH_SIZE)
+
+        def wasserstein_loss(real_labels, pred_labels):
+            return backend.mean(real_labels*pred_labels)
+
+
         def generator_loss(fake_output):
             """
 
@@ -308,7 +327,10 @@ if __name__=='__main__':
 
         autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0002)
         generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
-        discriminator_optimizer = tf.keras.optimizers.SGD()
+        if WASSERSTEIN:
+            discriminator_optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.00005)
+        else:
+            discriminator_optimizer = tf.keras.optimizers.SGD()
 
         flat_latent_dim=0
         if FLAT==True:
@@ -319,7 +341,7 @@ if __name__=='__main__':
         else:
             autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
-        discs=[conv_discrim(b,len(art_styles),attention=ATTENTION) for b in OUTPUT_BLOCKS]
+        discs=[conv_discrim(b,len(art_styles),attention=ATTENTION,wasserstein=WASSERSTEIN) for b in OUTPUT_BLOCKS]
 
         noise_dim=gen.input.shape
         if FLAT==False and len(noise_dim)!=3:
@@ -401,7 +423,13 @@ if __name__=='__main__':
                 #print(real_output)
                 
                 gen_loss= generator_loss(fake_output)
-                disc_loss = discriminator_loss(real_output, fake_output)
+                if WASSERSTEIN==True:
+                    disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=real_output.shape,mean=0,stddev=.01))
+                    disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=real_output.shape,mean=0,stddev=.01))
+                else:
+                    disc_loss_real = discriminator_loss_single(real_output,1)
+                    disc_loss_fake =discriminator_loss_single(fake_output,0)
+                disc_loss= [disc_loss_fake,disc_loss_real]
                 #div_loss=0
                 if diversity_training == True:
                     div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
@@ -426,10 +454,11 @@ if __name__=='__main__':
                     gen_class_label_loss= GAMMA * classification_loss(fake_labels, art_style_encoding_list)
                 if GAMMA !=0:
                     disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
+                    disc_loss.append(disc_class_label_loss)
                 class_label_loss= gen_class_label_loss+disc_class_label_loss
                 class_label_loss_list.append(class_label_loss)
 
-                disc_loss+=disc_class_label_loss
+                #disc_loss+=disc_class_label_loss
                 combined_loss+=gen_class_label_loss
                 disc_loss_list.append(disc_loss)
                 combined_loss_list.append(combined_loss)
@@ -437,13 +466,15 @@ if __name__=='__main__':
         if gen_training is True or diversity_training is True:
             gradients_of_generator = gen_tape.gradient(combined_loss_sum, gen.trainable_variables)
             generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))       
-        for disc,disc_loss in zip(discs,disc_loss_list):
-            if disc_training is True:
-                gradients_of_discriminator = disc_tape.gradient(disc_loss, disc.trainable_variables)
-                discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, disc.trainable_variables))
+        for disc,disc_losses in zip(discs,disc_loss_list):
+            for disc_loss in disc_losses:
+                if disc_training is True:
+                    gradients_of_discriminator = disc_tape.gradient(disc_loss, disc.trainable_variables)
+                    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, disc.trainable_variables))
 
         del disc_tape
-        return sum(disc_loss_list),sum(combined_loss_list),sum(diversity_loss_list),sum(class_label_loss_list)
+        #print(disc_loss_list)
+        return sum([sum(dl) for dl in disc_loss_list]),sum(combined_loss_list),sum(diversity_loss_list),sum(class_label_loss_list)
 
     def train_step_ae(images): #training autoencoder to reconstruct things, not generate
         with tf.GradientTape() as tape:
@@ -486,15 +517,32 @@ if __name__=='__main__':
         iv3_model = InceptionV3(include_top=False, pooling='avg', input_shape=image_dim) # download inception model for FID
         fid_func=calculate_fid(iv3_model)
 
-    def train(dataset,epochs=EPOCHS,picture=True,ae_epochs=AE_EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,one_hot=one_hot,save_gen=True,save_disc=True):
-        '''the entire training function, training autoencoder and GAN
-
-        Parameters:
+    def train(dataset,epochs=EPOCHS,picture=True,ae_epochs=AE_EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,one_hot=one_hot,save_gen=True,save_disc=True,n_critic=1):
+        '''It trains the model
+        
+        Parameters
         ----------
-
-        dataset -- tf BatchedDataSet. The iterable object that supplies all the images
-        epochs -- int. how many epochs to train GAN for
-        picture -- bool. Whether to make generate images or not
+        dataset
+            the dataset to train on
+        epochs
+            the number of epochs to train for
+        picture, optional
+            if True, saves generated images
+        ae_epochs
+            the number of epochs to train the autoencoder for
+        pre_train_epochs
+            the number of epochs to train the discriminator before training the generator
+        name
+            the name of the model
+        one_hot
+            whether or not to use one hot encoding for the labels
+        save_gen, optional
+            whether to save the generator
+        save_disc, optional
+            whether to save the discriminator
+        n_critic, optional
+            the number of discriminator updates per generator update
+        
         '''
         check_dir_auto='./{}/{}/{}'.format(checkpoint_dir,name,'auto')
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
@@ -614,6 +662,12 @@ if __name__=='__main__':
             avg_class_loss=0.0
             for i,images in enumerate(dataset):
                 #for images in image_tuples:
+                if i% n_critic ==0:
+                    gen_training=True
+                    diversity_training=DIVERSITY
+                else:
+                    gen_training=False
+                    diversity_training=False
                 disc_loss,gen_loss,div_loss,class_label_loss=train_step_dist(images,gen_training,disc_training,diversity_training,one_hot=one_hot)
                 if i%100==0: #print out the loss every 100 batches
                     print('\tbatch {} disc_loss: {:.4f} gen loss: {:.4f} diversity loss: {:.4f} class loss: {:.4f}'.format(i,disc_loss,gen_loss,div_loss,class_label_loss))
@@ -650,22 +704,11 @@ if __name__=='__main__':
                 disc.save_weights(save_dir+'cp.ckpt')
             if picture is True: #creates generated images
                 for suffix in ['i','ii','iii']:
-                    '''
-                    collage=[]
-                    for x in range(3):
-                        row=[]
-                        for y in range(3):
-                            noise = tf.random.normal([1, *interm_noise_dim])
-                            gen_img=intermediate_model(noise).numpy()
-                            row.append(gen_img[0])
-                        collage.append(cv2.hconcat(row))
-                    gen_img_collage=cv2.vconcat(collage)
-                    '''
                     noise = tf.random.normal([1, *interm_noise_dim])
                     gen_img=intermediate_model(noise).numpy()[0]
                     new_img_path='{}/epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
                     cv2.imwrite(new_img_path,gen_img)
-                    print('the file exists == {}'.format(os.path.exists(new_img_path)))
+                    #print('the file exists == {}'.format(os.path.exists(new_img_path)))
     
     dataset=get_dataset_gen_slow_labels(OUTPUT_BLOCKS,GLOBAL_BATCH_SIZE,one_hot,LIMIT,art_styles,genres)
     #dataset=get_dataset_gen_slow(OUTPUT_BLOCKS,GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
@@ -682,7 +725,10 @@ if __name__=='__main__':
     print('auto? ',AUTO)
     print('test fid? ', FID)
     start=timer()
-    train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
+    if WASSERSTEIN:
+        train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,n_critic=N_CRITIC)
+    else:
+        train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
     end=timer()
     print('time elapsed {}'.format(end-start))
     make_big_gif(NAME) #will save a gif called collage_movie

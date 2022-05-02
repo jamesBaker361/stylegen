@@ -4,13 +4,29 @@ from tensorflow.keras import layers
 
 from group_norm import GroupNormalization
 from resnext import ResNextBlock
+from keras.constraints import Constraint
 
 from data_processing import vgg_layers
 from generator import *
 
 from other_globals import *
+from keras import backend
+# clip model weights to a given hypercube
+class ClipConstraint(Constraint):
+	# set clip value when initialized
+	def __init__(self, clip_value):
+		self.clip_value = clip_value
+ 
+	# clip model weights to hypercube
+	def __call__(self, weights):
+		return backend.clip(weights, -self.clip_value, self.clip_value)
+ 
+	# get the config
+	def get_config(self):
+		return {'clip_value': self.clip_value}
 
-def conv_discrim(block,labels=0,attention=False):
+
+def conv_discrim(block,labels=0,attention=False,wasserstein=False):
     """[summary]
 
     Args:
@@ -26,16 +42,22 @@ def conv_discrim(block,labels=0,attention=False):
     inputs=layers.Input(shape=input_shape)
 
     conv1_dim=max(128, input_shape[-1] //2)
-    x= layers.Conv2D(conv1_dim,(4,4),(2,2),padding='same')(inputs)
+
+    if wasserstein:
+        constraint=ClipConstraint(0.01)
+    else:
+        constraint=Constraint()
+
+    x= layers.Conv2D(conv1_dim,(4,4),(2,2),padding='same',kernel_constraint=constraint)(inputs)
     x=layers.BatchNormalization()(x)
     x=layers.LeakyReLU()(x)
     x=layers.Dropout(.2)(x)
     if attention==True:
         x=attn_block(x)
 
-    for _ in range(3):
-        x = ResNextBlock(kernel_size=(4, 4))(x)
-        x= layers.Conv2D(x.shape[-1] //2,(4,4),(2,2),padding='same')(x)
+    for _ in range(5):
+        #x = ResNextBlock(kernel_size=(4, 4))(x)
+        x= layers.Conv2D(max(x.shape[-1] //2,4),(4,4),(2,2),padding='same',kernel_constraint=constraint)(x)
         x=layers.BatchNormalization()(x)
         x=layers.LeakyReLU()(x)
         x=layers.Dropout(.2)(x)
@@ -49,7 +71,10 @@ def conv_discrim(block,labels=0,attention=False):
     z = layers.Dense(8)(x)
     z=layers.BatchNormalization()(z)
     z=layers.LeakyReLU()(z)
-    z = layers.Dense(1,activation='sigmoid')(z)
+    if wasserstein == True:
+        z=layers.Dense(1,activation="linear")(z)
+    else:
+        z = layers.Dense(1,activation='sigmoid')(z)
 
     if labels>0:#adds classification head
         y=layers.Dropout(.2)(x)
