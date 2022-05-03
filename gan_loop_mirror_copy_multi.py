@@ -399,7 +399,8 @@ if __name__=='__main__':
                 for art_style_encoding in art_style_encoding_list:
                     generic_noise_vector=tf.random.normal([base_flat_noise_dim])
                     noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
-                noise=tf.concat(noise,axis=0)
+                if len(physical_devices)==0:
+                    noise=tf.concat(noise,axis=0)
             else:
                 noise = tf.random.normal([batch_size, * noise_dim])
             
@@ -446,12 +447,6 @@ if __name__=='__main__':
                     diversity_loss_list.append(div_loss)
                 else:
                     diversity_loss_list.append(tf.constant(0.0))
-
-                #class_label_loss=tf.constant(0.0)
-                #gen_class_label_loss=tf.constant(0.0)
-                #disc_class_label_loss=tf.constant(0.0)
-
-                #combined_loss=gen_loss #this is going to be gen_loss and/or diversity loss and classification loss
                 
                 if CONDITIONAL:
                     gen_class_label_loss= GAMMA * classification_loss(fake_labels, art_style_encoding_list)
@@ -509,6 +504,7 @@ if __name__=='__main__':
         with tf.GradientTape() as tape:
             labels=images[-1]
             images=images[0]
+            #print(len(images))
             if CONDITIONAL==False:
                 reconstructed_images=autoenc(images) #if its not conditional, then the AE doesn't need the labels
             else:
@@ -534,14 +530,6 @@ if __name__=='__main__':
         per_replica_losses = strategy.run(train_step_ae, args=(images,))
         return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
 
-    def train_autoencoder(dataset,ae_epochs=AE_EPOCHS):
-        print('autoencoder training')
-        for epoch in range(ae_epochs):
-            for i,images in enumerate(dataset):
-                ae_loss=train_step_dist_ae(images)
-                if i % 10 ==0:
-                    print('\tbatch {} loss {}'.format(i,ae_loss))
-            print('epoch: {} ended with ae loss {}'.format(epoch,ae_loss))
     if FID == True:
         iv3_model = InceptionV3(include_top=False, pooling='avg', input_shape=image_dim) # download inception model for FID
         fid_func=calculate_fid(iv3_model)
@@ -606,8 +594,8 @@ if __name__=='__main__':
                 for i,images in enumerate(dataset):
                     print(len(images))
                     print(type(images))
-                    for i in images:
-                        print(i.shape)
+                    for img in images:
+                        print(img.shape)
                     ae_loss=train_step_dist_ae(images)
                     avg_auto_loss+=ae_loss/LIMIT
                     if i%100==0:

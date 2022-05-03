@@ -172,37 +172,6 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
     x=Rescaling(255,name='img_output')(x)
     return tk.Model(inputs=inputs,outputs=x,name='decoder')
 
-def full_autoencoder(inputs,block,residual,attention,flat_latent_dim,noise_weight):
-    '''> The function takes in the inputs, the block, the residual, the attention, and the flat latent
-    dimension, and returns the full autoencoder
-    
-    Parameters
-    ----------
-    inputs
-        the input tensor
-    block
-        the VGG block this takes as input
-    residual
-        Whether to use residual connections in the encoder and decoder.
-    attention
-        whether to use attention in the encoder and decoder
-    flat_latent_dim
-        the dimension of the latent space.
-    noise_weight
-        the amount to scale the noise to add to the encoder output.
-    
-    Returns
-    -------
-        The output of the decoder.
-    
-    '''
-    input_shape=input_shape_dict[block]
-    x=get_encoder(inputs,input_shape,residual,noise_weight=noise_weight,flat_latent_dim=flat_latent_dim)
-    dec=make_decoder(x.shape[1:],residual,attention,flat_latent_dim)
-    #x = enc(inputs)
-    x=dec(x)
-    return x
-
 def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0):
     '''`aegen` takes in an image, encodes it, adds some noise, decodes it, and then compares the decoded
     image to the original image
@@ -252,12 +221,22 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
     return Model(inputs, outputs=x,name='aegen')
 
 def extract_generator(model,block,output_blocks):
-    """gets the decoder part out of the generator and adds the vgg stuff
-
-    Args:
-        model: the aegen
-        output_blocks: [] the list of output blocks we care about
-    """
+    '''It takes the decoder part of the autoencoder, and adds the VGG19 layers to it
+    
+    Parameters
+    ----------
+    model
+        the model to extract the generator from
+    block
+        the block number of the VGG19 model to extract features from.
+    output_blocks
+        a list of the names of the layers you want to extract from the VGG19 model.
+    
+    Returns
+    -------
+        A model that takes in the input shape of the decoder and outputs the output of the vgg model.
+    
+    '''
     decoder=model.get_layer('decoder')
     inputs=tk.Input(shape=decoder.input_shape[1:])
     x=decoder(inputs)
