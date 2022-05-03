@@ -49,7 +49,7 @@ ATTENTION=True #whether to use attn block layers in the AEGEN
 DIVERSITY=True #whether to optimize generator to care about diversity
 BETA=0.00025 #beta coefficient on diversity term
 CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artistic style labels as input to the flat generator
-GAMMA=0.1 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
+GAMMA=0.0 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
 OUTPUT_BLOCKS=[BLOCK]
 NORM='instance'
@@ -170,6 +170,12 @@ if __name__=='__main__':
         ENCODER_NOISE=arg_vars[encoder_noise_str]
     WASSERSTEIN=args.wasserstein
     N_CRITIC=args.n_critic
+
+    if GAMMA!=0:
+        CONDITIONAL=True
+        FLAT=True
+    else:
+        CONDITIONAL=False
         
     try:
         OUTPUT_BLOCKS.remove(BLOCK)
@@ -375,22 +381,25 @@ if __name__=='__main__':
         combined_loss_list=[]
         disc_loss_list=[]
         diversity_loss_list=[]
+        gen_loss_list=[]
         class_label_loss_list=[]
         diversity_batch_size=4
         
         print('len discsk',len(discs))
-        print('bath size',batch_size)
+        print('batch size',batch_size)
         
-        with tf.GradientTape() as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
+        with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
 
             if CONDITIONAL == True:
+                #noise=tf.random.normal([batch_size,flat_latent_dim])
+
                 random_art_styles=[random.choice(art_styles) for _ in range(batch_size)]
                 art_style_encoding_list=[tf.convert_to_tensor(one_hot.transform([[art_style]]).toarray(), dtype=tf.float32)[0] for art_style in random_art_styles]
                 noise=[]
                 for art_style_encoding in art_style_encoding_list:
                     generic_noise_vector=tf.random.normal([base_flat_noise_dim])
                     noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
-                #noise=tf.concat(noise,axis=0)
+                noise=tf.concat(noise,axis=0)
             else:
                 noise = tf.random.normal([batch_size, * noise_dim])
             
@@ -438,34 +447,53 @@ if __name__=='__main__':
                 else:
                     diversity_loss_list.append(tf.constant(0.0))
 
-                class_label_loss=tf.constant(0.0)
-                gen_class_label_loss=tf.constant(0.0)
-                disc_class_label_loss=tf.constant(0.0)
+                #class_label_loss=tf.constant(0.0)
+                #gen_class_label_loss=tf.constant(0.0)
+                #disc_class_label_loss=tf.constant(0.0)
 
-                combined_loss=gen_loss #this is going to be gen_loss and/or diversity loss and classification loss
-
-                if gen_training == True:
-                    combined_loss=gen_loss
-                if diversity_training == True:
-                    combined_loss=div_loss 
-                if diversity_training==True and gen_training==True:
-                    combined_loss=div_loss+gen_loss
-                if GAMMA!=0 and CONDITIONAL==True:
+                #combined_loss=gen_loss #this is going to be gen_loss and/or diversity loss and classification loss
+                
+                if CONDITIONAL:
                     gen_class_label_loss= GAMMA * classification_loss(fake_labels, art_style_encoding_list)
+                else:
+                    gen_class_label_loss=tf.constant(0.0)
+
                 if GAMMA !=0:
                     disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
                     disc_loss.append(disc_class_label_loss)
-                class_label_loss= gen_class_label_loss+disc_class_label_loss
+                    class_label_loss= gen_class_label_loss+disc_class_label_loss
+                else:
+                    class_label_loss=tf.constant(0.0)
+                    disc_class_label_loss=tf.constant(0.0)
+                
                 class_label_loss_list.append(class_label_loss)
 
                 #disc_loss+=disc_class_label_loss
-                combined_loss+=gen_class_label_loss
+                combined_loss=0
+                gen_loss_singletons=[]
+                if gen_training == True:
+                    gen_loss_singletons.append(gen_loss)
+                    combined_loss+=gen_loss
+                    #gen_loss_list.append([gen_loss,gen_class_label_loss])
+                if diversity_training == True:
+                    combined_loss+=div_loss
+                    gen_loss_singletons.append(div_loss)
+                if CONDITIONAL:
+                    gen_loss_singletons.append(gen_class_label_loss)
+                    #gen_loss_list.append([div_loss,gen_class_label_loss])
+                #combined_loss+=gen_class_label_loss
+                gen_loss_list.append(gen_loss_singletons)
                 disc_loss_list.append(disc_loss)
-                combined_loss_list.append(combined_loss)
-            combined_loss_sum=sum(combined_loss_list)
+                #combined_loss_list.append(combined_loss)
+            #combined_loss_sum=sum(combined_loss_list)
         if gen_training is True or diversity_training is True:
-            gradients_of_generator = gen_tape.gradient(combined_loss_sum, gen.trainable_variables)
-            generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))       
+            print(len(gen_loss_list))
+            for loss_list in gen_loss_list:
+                print(len(loss_list))
+                for loss in loss_list:
+                    print(loss)
+                    gradients_of_generator = gen_tape.gradient(loss, gen.trainable_variables)
+                    generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))       
         for disc,disc_losses in zip(discs,disc_loss_list):
             for disc_loss in disc_losses:
                 if disc_training is True:
@@ -473,6 +501,7 @@ if __name__=='__main__':
                     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, disc.trainable_variables))
 
         del disc_tape
+        del gen_tape
         #print(disc_loss_list)
         return sum([sum(dl) for dl in disc_loss_list]),sum(combined_loss_list),sum(diversity_loss_list),sum(class_label_loss_list)
 
@@ -575,6 +604,10 @@ if __name__=='__main__':
                 avg_auto_loss=0.0
                 start=timer()
                 for i,images in enumerate(dataset):
+                    print(len(images))
+                    print(type(images))
+                    for i in images:
+                        print(i.shape)
                     ae_loss=train_step_dist_ae(images)
                     avg_auto_loss+=ae_loss/LIMIT
                     if i%100==0:
