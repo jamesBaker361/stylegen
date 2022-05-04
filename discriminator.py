@@ -55,7 +55,7 @@ def conv_discrim(block,labels=0,attention=False,wasserstein=False):
     if attention==True:
         x=attn_block(x)
 
-    for _ in range(5):
+    for _ in range(3):
         #x = ResNextBlock(kernel_size=(4, 4))(x)
         x= layers.Conv2D(max(x.shape[-1] //2,4),(4,4),(2,2),padding='same',kernel_constraint=constraint)(x)
         x=layers.BatchNormalization()(x)

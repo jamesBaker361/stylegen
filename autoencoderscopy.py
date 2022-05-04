@@ -96,9 +96,6 @@ def get_encoder(inputs,input_dim,residual,
         x=normalization()(x)
         ##x=layers.Dropout(.2)(x)
         x=layers.LeakyReLU()(x)
-    if noise_weight!=0:
-        noise=noise_weight*tf.random.normal(x.shape[1:])
-        x=tf.keras.layers.Add()([x,noise])
 
     if base_flat_noise_dim>0:
         x=layers.Flatten()(x)
@@ -172,7 +169,7 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
     x=Rescaling(255,name='img_output')(x)
     return tk.Model(inputs=inputs,outputs=x,name='decoder')
 
-def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0):
+def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0,batch_size=1):
     '''`aegen` takes in an image, encodes it, adds some noise, decodes it, and then compares the decoded
     image to the original image
     
@@ -194,6 +191,8 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
         "instance" or "batch"
     noise_weight, optional
         the amount to scale the noise to add to the encoder output.
+    batch_size, optional
+        batch size
     
     Returns
     -------
@@ -206,6 +205,10 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
     print(inputs.shape)
     x=get_encoder(inputs,input_shape,residual,
         noise_weight=noise_weight,base_flat_noise_dim=base_flat_noise_dim,norm=norm)
+    if noise_weight!=0:
+        print(x.shape)
+        noise=noise_weight*tf.random.normal((batch_size, * x.shape[1:]))
+        x=tf.keras.layers.Add()([x,noise])
     if len(art_styles)>0:
         class_inputs=tk.Input(shape=(len(art_styles)))
         x=tf.concat([x,class_inputs],axis=-1)
