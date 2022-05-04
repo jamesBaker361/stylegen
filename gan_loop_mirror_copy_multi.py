@@ -35,7 +35,7 @@ tf.config.run_functions_eagerly(True)
 
 EPOCHS=2 #how mnay epochs to train generator and discriminator for
 AE_EPOCHS=0 #how many epochs to pre train autoencoder for
-BATCH_SIZE_PER_REPLICA=4 #batch size per gpu
+BATCH_SIZE_PER_REPLICA=2 #batch size per gpu
 LIMIT=10 #how many images in total dataset
 PRE_EPOCHS=0 #how many epochs to pretrain discriminator on
 NAME='testing'
@@ -54,8 +54,8 @@ CONDITIONAL=False #whether to make it a conditional GAN or not; CGAN uses artist
 GAMMA=0.0 #weight for relative weight to put on classification loss- if gamma=0, we wont do classification loss
 LOAD_GEN=True #sometimes we want to load the autoencoder but not the generator
 OUTPUT_BLOCKS=[BLOCK]
-NORM='instance'
-ENCODER_NOISE=1.0
+NORM='instance' #what kind of norm to use (batch, group, layer, instande)
+ENCODER_NOISE=1.0 #what to multiply encoder noise to
 WASSERSTEIN=False #https://machinelearningmastery.com/how-to-code-a-wasserstein-generative-adversarial-network-wgan-from-scratch/
 N_CRITIC=5 #how many times to train the discriminator than the generator
 
@@ -683,6 +683,7 @@ if __name__=='__main__':
             avg_disc_loss=0.0
             avg_diversity_loss=0.0
             avg_class_loss=0.0
+            i=0
             for i,images in enumerate(dataset):
                 #for images in image_tuples:
                 if i% n_critic ==0:
