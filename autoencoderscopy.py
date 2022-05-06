@@ -3,7 +3,7 @@ import tensorflow.keras as tk
 from tensorflow.keras import layers,Model
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow_addons.layers import InstanceNormalization
-import string
+from tensorflow.keras.layers  import GaussianNoise
 
 from tensorflow.python.keras.activations import sigmoid
 
@@ -206,9 +206,7 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
     x=get_encoder(inputs,input_shape,residual,
         noise_weight=noise_weight,base_flat_noise_dim=base_flat_noise_dim,norm=norm)
     if noise_weight!=0:
-        print(x.shape)
-        noise=noise_weight*tf.random.normal((batch_size, * x.shape[1:]))
-        x=tf.keras.layers.Add()([x,noise])
+        x=GaussianNoise(noise_weight)(x)
     if len(art_styles)>0:
         class_inputs=tk.Input(shape=(len(art_styles)))
         x=tf.concat([x,class_inputs],axis=-1)
