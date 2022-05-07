@@ -299,7 +299,7 @@ if __name__=='__main__':
             -------
             total_loss -- tensor constant. the loss (approaches -infinity when images are less similar)
             '''
-            batch_size=len(samples)
+            batch_size=GLOBAL_BATCH_SIZE #len(samples)
             loss=0 #[-1.0* tf.reduce_mean(tf.square(tf.subtract(samples, samples)))]
             gram_samples=[gram_matrix(s) for s in samples]
             for i in range(batch_size):
@@ -384,7 +384,7 @@ if __name__=='__main__':
         print("train step eager ",tf.executing_eagerly())
         labels=images[-1]
         images=images[:-1]
-        batch_size=images[0].shape[0]
+        batch_size=GLOBAL_BATCH_SIZE #images[0].shape[0] tf.shape(images)
         combined_loss_list=[]
         disc_loss_list=[]
         diversity_loss_list=[]
@@ -409,7 +409,7 @@ if __name__=='__main__':
                 #if len(physical_devices)==0:
                 noise=tf.concat(noise,axis=0)
             else:
-                noise = tf.random.normal([batch_size, * noise_dim])
+                noise = tf.random.normal([batch_size, * noise_dim],dtype=tf.float64)
             
             sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
             
@@ -440,8 +440,8 @@ if __name__=='__main__':
                 #print(real_output)
                 
                 if WASSERSTEIN==True:
-                    disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=real_output.shape,mean=0,stddev=.01))
-                    disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=real_output.shape,mean=0,stddev=.01))
+                    disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
+                    disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
                 else:
                     disc_loss_real = discriminator_loss_single(real_output,1)
                     disc_loss_fake =discriminator_loss_single(fake_output,0)
@@ -452,6 +452,7 @@ if __name__=='__main__':
                     _div_loss*=BETA
                     diversity_loss_list.append(_div_loss)
                 else:
+                    _div_loss=tf.constant(0.0)
                     diversity_loss_list.append(tf.constant(0.0))
                 
                 if CONDITIONAL:
@@ -508,12 +509,16 @@ if __name__=='__main__':
         del disc_tape
         del gen_tape
         #print(disc_loss_list)
-        return sum([sum(dl) for dl in disc_loss_list]),sum(combined_loss_list),sum(diversity_loss_list),sum(class_label_loss_list)
+        
+        #return tf.add_n([tf.add_n(dl) for dl in disc_loss_list]),0,0,0
+        return 0,0,0,0
+        #return 0,0,0,0
+        #return 0,0,0,0
+        #return tf.add_n([tf.add_n(dl) for dl in disc_loss_list]),tf.add_n(combined_loss_list),tf.add_n(diversity_loss_list),tf.add_n(class_label_loss_list)
 
     @tf.function
     def train_step_ae(images): #training autoencoder to reconstruct things, not generate
         with tf.GradientTape() as tape:
-            print(len(images))
             labels=images[-1]
             images=images[0]
             #print(len(images))
@@ -574,6 +579,8 @@ if __name__=='__main__':
             the number of discriminator updates per generator update
         
         '''
+        image_tensors=[]
+        image_paths=[]
         check_dir_auto='./{}/{}/{}'.format(checkpoint_dir,name,'auto')
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
         check_dir_disc_list=['./{}/{}/{}/{}'.format(checkpoint_dir,name,'disc',b) for b in OUTPUT_BLOCKS]
@@ -596,7 +603,7 @@ if __name__=='__main__':
                     if start_epoch<=0:
                         break
                 if start_epoch>0:
-                    autoenc.load_weights(most_recent+'/cp.ckpt')
+                    #autoenc.load_weights(most_recent+'/cp.ckpt')
                     print('successfully loaded autoencoder from epoch {}'.format(start_epoch))
                     start_epoch+=1
                     if ae_epochs>start_epoch:
@@ -617,7 +624,7 @@ if __name__=='__main__':
                 save_dir=check_dir_auto+'/epoch_{}/'.format(epoch)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                autoenc.save_weights(save_dir+'cp.ckpt')
+                #autoenc.save_weights(save_dir+'cp.ckpt')
             if GRAPH_LOSS==True and len(avg_auto_loss_history)>0:
                 data_to_csv(name,'auto',avg_auto_loss_history)
         avg_disc_loss_history=[]
@@ -668,7 +675,7 @@ if __name__=='__main__':
                     if start_epoch_disc<=0:
                         break
                 if start_epoch_disc>0 and NO_LOAD==False:
-                    disc.load_weights(most_recent_disc+'/cp.ckpt')
+                    #disc.load_weights(most_recent_disc+'/cp.ckpt')
                     print('successfully loaded discriminator from epoch {}'.format(start_epoch_disc))
         start_epoch_adverse=0
         gen_ckpt_paths=get_checkpoint_paths(check_dir_gen)
@@ -682,7 +689,7 @@ if __name__=='__main__':
                 if start_epoch_adverse<=0:
                     break
             if start_epoch_adverse>0 and NO_LOAD==False:
-                gen.load_weights(most_recent_gen+'/cp.ckpt')
+                #gen.load_weights(most_recent_gen+'/cp.ckpt')
                 print('successfully loaded generator from epoch {}'.format(start_epoch_adverse))
                 start_epoch_adverse+=1
         for epoch in range(start_epoch_adverse,epochs,1):
@@ -705,11 +712,11 @@ if __name__=='__main__':
                     diversity_training=False
                 disc_loss,gen_loss,div_loss,class_label_loss=train_step_dist(images,gen_training,disc_training,diversity_training,one_hot=one_hot)
                 if i%100==0: #print out the loss every 100 batches
-                    print('\tbatch {} disc_loss: {:.4f} gen loss: {:.4f} diversity loss: {:.4f} class loss: {:.4f}'.format(i,disc_loss,gen_loss,div_loss,class_label_loss))
-                avg_gen_loss+=gen_loss/LIMIT
+                    print('\tbatch {} disc_loss: {} gen loss: {} diversity loss: {} class loss: {}'.format(i,disc_loss,gen_loss,div_loss,class_label_loss))
+                '''avg_gen_loss+=gen_loss/LIMIT
                 avg_disc_loss+=disc_loss/LIMIT
                 avg_diversity_loss+=div_loss/LIMIT
-                avg_class_loss+=class_label_loss/LIMIT
+                avg_class_loss+=class_label_loss/LIMIT'''
                 i+=1
             end=timer()
             avg_disc_loss_history.append(avg_disc_loss)
@@ -732,17 +739,20 @@ if __name__=='__main__':
                 save_dir=check_dir_gen+'/epoch_{}/'.format(epoch)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                gen.save_weights(save_dir+'cp.ckpt')
+                #gen.save_weights(save_dir+'cp.ckpt')
             if save_disc is True:
                 save_dir=check_dir_disc+'/epoch_{}/'.format(epoch)
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                disc.save_weights(save_dir+'cp.ckpt')
+                #disc.save_weights(save_dir+'cp.ckpt')
             if picture is True: #creates generated images
                 for suffix in ['i','ii','iii']:
                     noise = tf.random.normal([1, *interm_noise_dim])
+                    #gen_img=intermediate_model(noise)
                     gen_img=intermediate_model(noise).numpy()[0]
                     new_img_path='{}/epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
+                    #image_tensors.append(gen_img)
+                    #image_paths.append(new_img_path)
                     cv2.imwrite(new_img_path,gen_img)
                     #print('the file exists == {}'.format(os.path.exists(new_img_path)))
     
