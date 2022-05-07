@@ -31,7 +31,10 @@ from transfer import *
 import random
 from sklearn.preprocessing import OneHotEncoder
 
-tf.config.run_functions_eagerly(True)
+from tensorflow.python.framework.ops import disable_eager_execution
+
+#disable_eager_execution()
+
 
 EPOCHS=2 #how mnay epochs to train generator and discriminator for
 AE_EPOCHS=0 #how many epochs to pre train autoencoder for
@@ -360,6 +363,7 @@ if __name__=='__main__':
         print('noise_dim',noise_dim)
         print('[1, * noise_dim]',[1, * noise_dim])
 
+    @tf.function
     def train_step(images,gen_training,disc_training,diversity_training,one_hot=None):
         """A single step to train the generator and discriminator
 
@@ -377,6 +381,7 @@ if __name__=='__main__':
         gen_loss -- float. generator loss
         div_loss. float. generator diversity loss
         """
+        print("train step eager ",tf.executing_eagerly())
         labels=images[-1]
         images=images[:-1]
         batch_size=images[0].shape[0]
@@ -505,6 +510,7 @@ if __name__=='__main__':
         #print(disc_loss_list)
         return sum([sum(dl) for dl in disc_loss_list]),sum(combined_loss_list),sum(diversity_loss_list),sum(class_label_loss_list)
 
+    @tf.function
     def train_step_ae(images): #training autoencoder to reconstruct things, not generate
         with tf.GradientTape() as tape:
             print(len(images))
@@ -540,6 +546,7 @@ if __name__=='__main__':
         iv3_model = InceptionV3(include_top=False, pooling='avg', input_shape=image_dim) # download inception model for FID
         fid_func=calculate_fid(iv3_model)
 
+    #@tf.function
     def train(dataset,epochs=EPOCHS,picture=True,ae_epochs=AE_EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,one_hot=one_hot,save_gen=True,save_disc=True,n_critic=1):
         '''It trains the model
         
@@ -597,11 +604,13 @@ if __name__=='__main__':
             for epoch in range(start_epoch,ae_epochs,1):
                 avg_auto_loss=0.0
                 start=timer()
-                for i,images in enumerate(dataset):
+                i=0
+                for images in dataset:
                     ae_loss=train_step_dist_ae(images)
                     avg_auto_loss+=ae_loss/LIMIT
                     if i%100==0:
                         print('\tbatch {} autoencoder loss {}'.format(i,ae_loss))
+                    i+=1
                 end=timer()
                 avg_auto_loss_history.append(avg_auto_loss)
                 print('epoch: {} ended with avg ae loss {} time elapsed: {}'.format(epoch,avg_auto_loss,end-start))
@@ -621,12 +630,14 @@ if __name__=='__main__':
             print('pretraining')
             for epoch in range(pre_train_epochs):
                 avg_disc_loss=0.0
-                for i,images in enumerate(dataset):
+                i=0
+                for images in dataset:
                     #for images in image_tuples:
                     disc_loss,_,__,____=train_step_dist(images,gen_training=False,disc_training=True,diversity_training=False,one_hot=one_hot)
                     if i % 100 == 0:
                         print('\tbatch {} disc loss {}'.format(i,disc_loss))
                     avg_disc_loss+=disc_loss/LIMIT
+                    i+=1
                 avg_disc_loss_history.append(avg_disc_loss)
                 print('epoch: {} ended with avg_disc_loss {}'.format(epoch,avg_disc_loss))
                 for disc,check_dir_disc in zip(discs,check_dir_disc_list):
@@ -684,7 +695,7 @@ if __name__=='__main__':
             avg_diversity_loss=0.0
             avg_class_loss=0.0
             i=0
-            for i,images in enumerate(dataset):
+            for images in dataset:
                 #for images in image_tuples:
                 if i% n_critic ==0:
                     gen_training=True
@@ -699,6 +710,7 @@ if __name__=='__main__':
                 avg_disc_loss+=disc_loss/LIMIT
                 avg_diversity_loss+=div_loss/LIMIT
                 avg_class_loss+=class_label_loss/LIMIT
+                i+=1
             end=timer()
             avg_disc_loss_history.append(avg_disc_loss)
             avg_gen_loss_history.append(avg_gen_loss)
@@ -735,6 +747,9 @@ if __name__=='__main__':
                     #print('the file exists == {}'.format(os.path.exists(new_img_path)))
     
     dataset=get_dataset_gen_slow_labels(OUTPUT_BLOCKS,GLOBAL_BATCH_SIZE,one_hot,LIMIT,art_styles,genres)
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    dataset = dataset.with_options(options)
     #dataset=get_dataset_gen_slow(OUTPUT_BLOCKS,GLOBAL_BATCH_SIZE,LIMIT,art_styles,genres)
     dataset=strategy.experimental_distribute_dataset(dataset)
     print('main loop')
@@ -748,6 +763,7 @@ if __name__=='__main__':
     print('block ',BLOCK, SHAPE)
     print('auto? ',AUTO)
     print('test fid? ', FID)
+    print("eagerly = ",tf.executing_eagerly())
     start=timer()
     if WASSERSTEIN:
         train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,n_critic=N_CRITIC)
