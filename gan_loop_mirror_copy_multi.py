@@ -363,7 +363,7 @@ if __name__=='__main__':
         print('noise_dim',noise_dim)
         print('[1, * noise_dim]',[1, * noise_dim])
 
-    @tf.function
+    #@tf.function
     def train_step(images,gen_training,disc_training,diversity_training,one_hot=None):
         """A single step to train the generator and discriminator
 
@@ -384,7 +384,7 @@ if __name__=='__main__':
         print("train step eager ",tf.executing_eagerly())
         labels=images[-1]
         images=images[:-1]
-        batch_size=GLOBAL_BATCH_SIZE #images[0].shape[0] tf.shape(images)
+        batch_size=tf.shape(images[0])[0]
         combined_loss_list=[]
         disc_loss_list=[]
         diversity_loss_list=[]
@@ -398,7 +398,7 @@ if __name__=='__main__':
         with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
 
             if CONDITIONAL == True:
-                #noise=tf.random.normal([batch_size,flat_latent_dim])
+                '''noise=tf.random.normal([batch_size,flat_latent_dim])
 
                 random_art_styles=[random.choice(art_styles) for _ in range(batch_size)]
                 art_style_encoding_list=[tf.convert_to_tensor(one_hot.transform([[art_style]]).toarray(), dtype=tf.float32)[0] for art_style in random_art_styles]
@@ -406,15 +406,18 @@ if __name__=='__main__':
                 for art_style_encoding in art_style_encoding_list:
                     generic_noise_vector=tf.random.normal([base_flat_noise_dim])
                     noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
+'''
                 #if len(physical_devices)==0:
-                noise=tf.concat(noise,axis=0)
+                generic_noise=tf.random.normal([batch_size,base_flat_noise_dim])
+                art_style_encoding_list=tf.random.uniform([batch_size,len(art_styles)],minval=0,maxval=1)
+                noise=tf.concat([generic_noise,art_style_encoding_list],axis=-1)
             else:
                 noise = tf.random.normal([batch_size, * noise_dim],dtype=tf.float64)
             
             sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
             
-            diversity_generated_samples=[[] for _ in range(batch_size)]
-            if diversity_training is True:
+            diversity_generated_samples=sample_noise
+            if diversity_training and gen_training:
                 diversity_generated_samples=gen(sample_noise,training=diversity_training)
                 
             generated_images_list=gen(noise, training=gen_training)
