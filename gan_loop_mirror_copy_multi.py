@@ -374,6 +374,8 @@ if __name__=='__main__':
         with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
             sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
             diversity_generated_samples=gen(sample_noise)
+            if len(discs)==1:
+                diversity_generated_samples=[diversity_generated_samples]
             for samples in diversity_generated_samples:
                 _div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
                 _div_loss*=BETA
