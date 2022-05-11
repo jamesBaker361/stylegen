@@ -266,7 +266,8 @@ if __name__=='__main__':
             return tf.nn.compute_average_loss(total_loss, global_batch_size=GLOBAL_BATCH_SIZE)
 
         def discriminator_loss_single(output,label_number):
-            vector=tf.ones_like(output)+tf.random.normal(shape=output.shape,mean=0,stddev=.1)
+            vector=tf.ones_like(output) #+tf.random.normal(shape=tf.shape(output),mean=0,stddev=.1)
+            vector +=tf.random.normal(shape=tf.shape(vector),mean=0,stddev=.1)
             vector=label_number* vector
             loss=cross_entropy(vector,output)
             return tf.nn.compute_average_loss(loss, global_batch_size=GLOBAL_BATCH_SIZE)
@@ -353,6 +354,11 @@ if __name__=='__main__':
             autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM,batch_size=BATCH_SIZE_PER_REPLICA)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
         discs=[conv_discrim(b,len(art_styles),attention=ATTENTION,wasserstein=WASSERSTEIN) for b in OUTPUT_BLOCKS]
+        truth_value=tf.concat([d.output[0] for d in discs],-1)
+        classification_value=tf.concat([d.output[1] for d in discs],-1)
+        mega_disc=tf.keras.Model(inputs=[d.input for d in discs],outputs=[truth_value,classification_value])
+        mega_disc.summary()
+        print(mega_disc.outputs)
 
         noise_dim=gen.input.shape
         if FLAT==False and len(noise_dim)!=3:
@@ -363,8 +369,31 @@ if __name__=='__main__':
         print('noise_dim',noise_dim)
         print('[1, * noise_dim]',[1, * noise_dim])
 
-    #@tf.function
-    def train_step(images,gen_training,disc_training,diversity_training,one_hot=None):
+    def train_step_diversity(diversity_batch_size=4):
+        diversity_loss_list=[]
+        with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
+            sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
+            diversity_generated_samples=gen(sample_noise)
+            for samples in diversity_generated_samples:
+                _div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
+                _div_loss*=BETA
+                diversity_loss_list.append(_div_loss)
+        for loss in diversity_loss_list:
+            gradients_of_generator = gen_tape.gradient(loss, gen.trainable_variables)
+            generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
+        return sum(diversity_loss_list)
+
+
+    def train_step_conditional(images):
+        labels=images[-1]
+        images=images[:-1]
+        batch_size=tf.shape(images[0])[0]
+        generic_noise=tf.random.normal([batch_size,base_flat_noise_dim])
+        art_style_encoding_list=tf.random.uniform([batch_size,len(art_styles)],minval=0,maxval=1)
+        noise=tf.concat([generic_noise,art_style_encoding_list],axis=-1)
+
+    @tf.function
+    def train_step(images,gen_training,disc_training):
         """A single step to train the generator and discriminator
 
         Parameters:
@@ -381,141 +410,66 @@ if __name__=='__main__':
         gen_loss -- float. generator loss
         div_loss. float. generator diversity loss
         """
-        print("train step eager ",tf.executing_eagerly())
         labels=images[-1]
-        images=images[:-1]
+        authentic_images=images[:-1]
         batch_size=tf.shape(images[0])[0]
-        combined_loss_list=[]
-        disc_loss_list=[]
-        diversity_loss_list=[]
-        gen_loss_list=[]
-        class_label_loss_list=[]
-        diversity_batch_size=4
-        
-        print('len discsk',len(discs))
-        print('batch size',batch_size)
         
         with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
 
             if CONDITIONAL == True:
-                '''noise=tf.random.normal([batch_size,flat_latent_dim])
-
-                random_art_styles=[random.choice(art_styles) for _ in range(batch_size)]
-                art_style_encoding_list=[tf.convert_to_tensor(one_hot.transform([[art_style]]).toarray(), dtype=tf.float32)[0] for art_style in random_art_styles]
-                noise=[]
-                for art_style_encoding in art_style_encoding_list:
-                    generic_noise_vector=tf.random.normal([base_flat_noise_dim])
-                    noise.append(tf.expand_dims(tf.concat([generic_noise_vector,art_style_encoding],axis=0),axis=0))
-'''
-                #if len(physical_devices)==0:
                 generic_noise=tf.random.normal([batch_size,base_flat_noise_dim])
                 art_style_encoding_list=tf.random.uniform([batch_size,len(art_styles)],minval=0,maxval=1)
                 noise=tf.concat([generic_noise,art_style_encoding_list],axis=-1)
             else:
                 noise = tf.random.normal([batch_size, * noise_dim],dtype=tf.float64)
-            
-            sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
-            
-            diversity_generated_samples=sample_noise
-            if diversity_training and gen_training:
-                diversity_generated_samples=gen(sample_noise,training=diversity_training)
                 
-            generated_images_list=gen(noise, training=gen_training)
-            
-            if len(discs)==1:
-                generated_images_list=[generated_images_list]
-                diversity_generated_samples=[diversity_generated_samples]
-            
-            for disc,generated_images,authentic_images,samples in zip(discs, generated_images_list,images,diversity_generated_samples):
-                '''print(disc.input_shape)
-                for v in [generated_images,authentic_images,samples,sample_noise]:
-                    pass
-                    try:
-                        print(v.shape)
-                    except AttributeError:
-                        print(len(v),end=',')
-                        for t in v:
-                            print(t.shape,end=' , ')
-                        print('nice')'''
-                real_output,real_labels = disc(authentic_images, training=disc_training) 
-                fake_output,fake_labels = disc(generated_images, training=disc_training)
-                
-                #print(real_output)
-                
-                if WASSERSTEIN==True:
-                    disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
-                    disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
-                else:
-                    disc_loss_real = discriminator_loss_single(real_output,1)
-                    disc_loss_fake =discriminator_loss_single(fake_output,0)
-                _disc_loss= [disc_loss_fake,disc_loss_real]
-                #div_loss=0
-                if diversity_training == True:
-                    _div_loss=diversity_loss_from_samples_and_noise(samples,sample_noise)/diversity_batch_size
-                    _div_loss*=BETA
-                    diversity_loss_list.append(_div_loss)
-                else:
-                    _div_loss=tf.constant(0.0)
-                    diversity_loss_list.append(tf.constant(0.0))
-                
-                if CONDITIONAL:
-                    gen_class_label_loss= GAMMA * classification_loss(fake_labels, art_style_encoding_list)
-                else:
-                    gen_class_label_loss=tf.constant(0.0)
+            generated_images=gen(noise, training=gen_training)
 
-                if GAMMA !=0:
-                    disc_class_label_loss= GAMMA * classification_loss(real_labels,labels)
-                    _disc_loss.append(disc_class_label_loss)
-                    class_label_loss= gen_class_label_loss+disc_class_label_loss
-                else:
-                    class_label_loss=tf.constant(0.0)
-                    disc_class_label_loss=tf.constant(0.0)
+            real_output,real_labels = mega_disc(authentic_images, training=disc_training) 
+            fake_output,fake_labels = mega_disc(generated_images, training=disc_training)
+            
                 
-                class_label_loss_list.append(class_label_loss)
+            if WASSERSTEIN==True:
+                disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
+                disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
+            else:
+                disc_loss_real = discriminator_loss_single(real_output,1)
+                disc_loss_fake =discriminator_loss_single(fake_output,0)
+            _disc_loss= disc_loss_fake+disc_loss_real
 
-                #disc_loss+=disc_class_label_loss
-                combined_loss=tf.constant(0.0)
-                gen_loss_singletons=[]
-                if gen_training == True:
-                    _gen_loss= generator_loss(fake_output)
-                    gen_loss_singletons.append(_gen_loss)
-                    combined_loss+=_gen_loss
-                    #gen_loss_list.append([gen_loss,gen_class_label_loss])
-                if diversity_training == True:
-                    combined_loss+=_div_loss
-                    gen_loss_singletons.append(_div_loss)
-                if CONDITIONAL:
-                    gen_loss_singletons.append(gen_class_label_loss)
-                    combined_loss+=gen_class_label_loss
-                gen_loss_list.append(gen_loss_singletons)
-                disc_loss_list.append(_disc_loss)
-                combined_loss_list.append(combined_loss)
+            if gen_training == True:
+                _gen_loss= generator_loss(fake_output)
+
+            if CONDITIONAL and GAMMA !=0:
+                gen_class_label_loss= GAMMA * classification_loss(fake_labels, tf.concat([art_style_encoding_list for _ in discs],axis=-1))
+                disc_class_label_loss= GAMMA * classification_loss(real_labels,tf.concat([labels for _ in discs],axis=-1))
+                class_label_loss= gen_class_label_loss+disc_class_label_loss
+                if gen_training:
+                    _gen_loss+=gen_class_label_loss
+                if disc_training:
+                    _disc_loss+=disc_class_label_loss
+            else:
+                class_label_loss=0
+
+            #disc_loss+=disc_class_label_loss
             #combined_loss_sum=sum(combined_loss_list)
-        for loss in combined_loss_list:
-            if gen_training is True or diversity_training is True:
-                gradients_of_generator = gen_tape.gradient(loss, gen.trainable_variables)
-                generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
-                del gradients_of_generator
-        '''for loss_list in gen_loss_list:
-            for loss in loss_list:
-                if gen_training is True or diversity_training is True:
-                    gradients_of_generator = gen_tape.gradient(loss, gen.trainable_variables)
-                    generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
-                    del gradients_of_generator'''
-        for disc,disc_losses in zip(discs,disc_loss_list):
-            for disc_loss in disc_losses:
-                if disc_training is True:
-                    gradients_of_discriminator = disc_tape.gradient(disc_loss, disc.trainable_variables)
-                    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, disc.trainable_variables))
-                    del gradients_of_discriminator
+        if gen_training is True:
+            gradients_of_generator = gen_tape.gradient(_gen_loss, gen.trainable_variables)
+            generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
+            del gradients_of_generator
+        
+        if disc_training is True:
+            gradients_of_discriminator = disc_tape.gradient(_disc_loss, mega_disc.trainable_variables)
+            discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, mega_disc.trainable_variables))
+            del gradients_of_discriminator
 
         del disc_tape
         del gen_tape
         #print(disc_loss_list)
         
         #return tf.add_n([tf.add_n(dl) for dl in disc_loss_list]),0,0,0
-        return 0,0,0,0
-        #return 0,0,0,0
+        #return strategy.experimental_local_results(0),strategy.experimental_local_results(0),strategy.experimental_local_results(0),strategy.experimental_local_results(0)
+        return _gen_loss,_disc_loss,class_label_loss
         #return 0,0,0,0
         #return tf.add_n([tf.add_n(dl) for dl in disc_loss_list]),tf.add_n(combined_loss_list),tf.add_n(diversity_loss_list),tf.add_n(class_label_loss_list)
 
@@ -539,7 +493,7 @@ if __name__=='__main__':
     #def get_train_step_dist():
     @tf.function
     def train_step_dist(images,gen_training=True,disc_training=True,diversity_training=True,one_hot=one_hot):
-        per_replica_losses = strategy.run(train_step, args=(images,gen_training,disc_training,diversity_training,one_hot,))
+        per_replica_losses = strategy.run(train_step, args=(images,gen_training,disc_training,))
         return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
     #return train_step_dist
     
@@ -582,8 +536,6 @@ if __name__=='__main__':
             the number of discriminator updates per generator update
         
         '''
-        image_tensors=[]
-        image_paths=[]
         check_dir_auto='./{}/{}/{}'.format(checkpoint_dir,name,'auto')
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
         check_dir_disc_list=['./{}/{}/{}/{}'.format(checkpoint_dir,name,'disc',b) for b in OUTPUT_BLOCKS]
@@ -643,7 +595,7 @@ if __name__=='__main__':
                 i=0
                 for images in dataset:
                     #for images in image_tuples:
-                    disc_loss,_,__,____=train_step_dist(images,gen_training=False,disc_training=True,diversity_training=False,one_hot=one_hot)
+                    disc_loss,_,__=train_step_dist(images,gen_training=False,disc_training=True,diversity_training=False,one_hot=one_hot)
                     if i % 100 == 0:
                         print('\tbatch {} disc loss {}'.format(i,disc_loss))
                     avg_disc_loss+=disc_loss/LIMIT
@@ -713,13 +665,11 @@ if __name__=='__main__':
                 else:
                     gen_training=False
                     diversity_training=False
-                disc_loss,gen_loss,div_loss,class_label_loss=train_step_dist(images,gen_training,disc_training,diversity_training,one_hot=one_hot)
+                disc_loss,gen_loss,class_label_loss=train_step_dist(images,gen_training,disc_training,diversity_training,one_hot=one_hot)
+                if diversity_training:
+                    div_loss=train_step_diversity()
                 if i%100==0: #print out the loss every 100 batches
                     print('\tbatch {} disc_loss: {} gen loss: {} diversity loss: {} class loss: {}'.format(i,disc_loss,gen_loss,div_loss,class_label_loss))
-                '''avg_gen_loss+=gen_loss/LIMIT
-                avg_disc_loss+=disc_loss/LIMIT
-                avg_diversity_loss+=div_loss/LIMIT
-                avg_class_loss+=class_label_loss/LIMIT'''
                 i+=1
             end=timer()
             avg_disc_loss_history.append(avg_disc_loss)
