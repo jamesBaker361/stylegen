@@ -52,8 +52,6 @@ def conv_discrim(block,labels=0,attention=False,wasserstein=False):
     x=layers.BatchNormalization()(x)
     x=layers.LeakyReLU()(x)
     x=layers.Dropout(.2)(x)
-    if attention==True:
-        x=attn_block(x)
 
     for _ in range(3):
         #x = ResNextBlock(kernel_size=(4, 4))(x)
@@ -65,8 +63,6 @@ def conv_discrim(block,labels=0,attention=False,wasserstein=False):
         #x=layers.BatchNormalization()(x)
         #x=layers.LeakyReLU()(x)
 
-    if attention==True:
-        x=attn_block(x)
     x=layers.Flatten()(x)
     z = layers.Dense(8)(x)
     z=layers.BatchNormalization()(z)

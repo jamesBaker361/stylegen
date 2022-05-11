@@ -441,6 +441,8 @@ if __name__=='__main__':
 
             if gen_training == True:
                 _gen_loss= generator_loss(fake_output)
+            else:
+                _gen_loss=tf.constant(0.0)
 
             if CONDITIONAL and GAMMA !=0:
                 gen_class_label_loss= GAMMA * classification_loss(fake_labels, tf.concat([art_style_encoding_list for _ in discs],axis=-1))
@@ -451,7 +453,7 @@ if __name__=='__main__':
                 if disc_training:
                     _disc_loss+=disc_class_label_loss
             else:
-                class_label_loss=0
+                class_label_loss=tf.constant(0.0)
 
             #disc_loss+=disc_class_label_loss
             #combined_loss_sum=sum(combined_loss_list)
