@@ -357,7 +357,6 @@ if __name__=='__main__':
         truth_value=tf.concat([d.output[0] for d in discs],-1)
         classification_value=tf.concat([d.output[1] for d in discs],-1)
         mega_disc=tf.keras.Model(inputs=[d.input for d in discs],outputs=[truth_value,classification_value])
-        mega_disc.summary()
         print(mega_disc.outputs)
 
         noise_dim=gen.input.shape
@@ -369,9 +368,10 @@ if __name__=='__main__':
         print('noise_dim',noise_dim)
         print('[1, * noise_dim]',[1, * noise_dim])
 
-    def train_step_diversity(diversity_batch_size=4):
+    @tf.function
+    def train_step_diversity(diversity_batch_size):
         diversity_loss_list=[]
-        with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
+        with tf.GradientTape(persistent=True) as gen_tape:
             sample_noise=tf.random.normal([diversity_batch_size, * noise_dim])
             diversity_generated_samples=gen(sample_noise)
             if len(discs)==1:
@@ -384,15 +384,6 @@ if __name__=='__main__':
             gradients_of_generator = gen_tape.gradient(loss, gen.trainable_variables)
             generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
         return sum(diversity_loss_list)
-
-
-    def train_step_conditional(images):
-        labels=images[-1]
-        images=images[:-1]
-        batch_size=tf.shape(images[0])[0]
-        generic_noise=tf.random.normal([batch_size,base_flat_noise_dim])
-        art_style_encoding_list=tf.random.uniform([batch_size,len(art_styles)],minval=0,maxval=1)
-        noise=tf.concat([generic_noise,art_style_encoding_list],axis=-1)
 
     @tf.function
     def train_step(images,gen_training,disc_training):
@@ -496,7 +487,7 @@ if __name__=='__main__':
 
     #def get_train_step_dist():
     @tf.function
-    def train_step_dist(images,gen_training=True,disc_training=True,diversity_training=True,one_hot=one_hot):
+    def train_step_dist(images,gen_training=True,disc_training=True):
         per_replica_losses = strategy.run(train_step, args=(images,gen_training,disc_training,))
         return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
     #return train_step_dist
@@ -506,6 +497,11 @@ if __name__=='__main__':
     @tf.function
     def train_step_dist_ae(images): #training step for autoencoder
         per_replica_losses = strategy.run(train_step_ae, args=(images,))
+        return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
+
+    @tf.function
+    def train_step_dist_div(diversity_batch_size=4):
+        per_replica_losses = strategy.run(train_step_diversity, args=(diversity_batch_size,))
         return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,axis=None)
 
     if FID == True:
@@ -599,7 +595,7 @@ if __name__=='__main__':
                 i=0
                 for images in dataset:
                     #for images in image_tuples:
-                    disc_loss,_,__=train_step_dist(images,gen_training=False,disc_training=True,diversity_training=False,one_hot=one_hot)
+                    disc_loss,_,__=train_step_dist(images,gen_training=False,disc_training=True)
                     if i % 100 == 0:
                         print('\tbatch {} disc loss {}'.format(i,disc_loss))
                     avg_disc_loss+=disc_loss/LIMIT
@@ -669,9 +665,9 @@ if __name__=='__main__':
                 else:
                     gen_training=False
                     diversity_training=False
-                disc_loss,gen_loss,class_label_loss=train_step_dist(images,gen_training,disc_training,diversity_training,one_hot=one_hot)
+                disc_loss,gen_loss,class_label_loss=train_step_dist(images,gen_training,disc_training)
                 if diversity_training:
-                    div_loss=train_step_diversity()
+                    div_loss=train_step_dist_div()
                 if i%100==0: #print out the loss every 100 batches
                     print('\tbatch {} disc_loss: {} gen loss: {} diversity loss: {} class loss: {}'.format(i,disc_loss,gen_loss,div_loss,class_label_loss))
                 i+=1
