@@ -668,15 +668,13 @@ if __name__=='__main__':
                 disc_loss,gen_loss,class_label_loss=train_step_dist(images,gen_training,disc_training)
                 if diversity_training:
                     div_loss=train_step_dist_div()
+                else:
+                    div_loss=0.0
                 if i%100==0: #print out the loss every 100 batches
                     print('\tbatch {} disc_loss: {} gen loss: {} diversity loss: {} class loss: {}'.format(i,disc_loss,gen_loss,div_loss,class_label_loss))
                 i+=1
             end=timer()
-            avg_disc_loss_history.append(avg_disc_loss)
-            avg_gen_loss_history.append(avg_gen_loss)
-            avg_diversity_loss_history.append(avg_diversity_loss)
-            avg_class_loss_history.append(avg_class_loss)
-            print('epoch: {} ended with disc_loss {} and gen loss {} after {} batches time elapsed={}' .format(epoch,avg_disc_loss,avg_gen_loss,i,end-start))
+            print('epoch: {} ended with disc_loss {} gen loss {} div_loss {} class lost {} after {} batches time elapsed={}' .format(epoch,disc_loss,gen_loss,div_loss,class_label_loss,i,end-start))
             if GRAPH_LOSS == True:
                 data_to_csv(name,'generator',avg_gen_loss_history)
                 data_to_csv(name,'discriminator',avg_disc_loss_history)
