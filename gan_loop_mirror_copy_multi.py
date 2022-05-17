@@ -61,6 +61,8 @@ NORM='instance' #what kind of norm to use (batch, group, layer, instande)
 ENCODER_NOISE=1.0 #what to multiply encoder noise to
 WASSERSTEIN=False #https://machinelearningmastery.com/how-to-code-a-wasserstein-generative-adversarial-network-wgan-from-scratch/
 N_CRITIC=5 #how many times to train the discriminator than the generator
+GP=False #gradient penalty https://github.com/igul222/improved_wgan_training/blob/master/gan_cifar.py
+LAMBDA_GP=10.0
 
 
 if __name__=='__main__':
@@ -122,6 +124,8 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(encoder_noise_str), help='what to multiply the encoder noise by (float)',type=float)
     parser.add_argument('--{}'.format(wasserstein_str),help="whether to use wasserstein GAN architecture",type=bool,default=False)
     parser.add_argument('--{}'.format(n_critic_str),help="how many times to train the discriminator than the generator",type=int,default=5)
+    parser.add_argument('--{}'.format("gp"),type=bool,default=False,help="gradient penalty loss")
+    parser.add_argument('--{}'.format("lambda_gp"),type=float,default=10.0,help="coefficient on gradient penalty")
 
     args = parser.parse_args()
 
@@ -175,6 +179,8 @@ if __name__=='__main__':
         ENCODER_NOISE=arg_vars[encoder_noise_str]
     WASSERSTEIN=args.wasserstein
     N_CRITIC=args.n_critic
+    GP=args.gp
+    LAMBDA_GP=args.lambda_gp
 
     if GAMMA!=0:
         CONDITIONAL=True
@@ -275,6 +281,21 @@ if __name__=='__main__':
         def wasserstein_loss(real_labels, pred_labels):
             return backend.mean(real_labels*pred_labels)
 
+        def gradient_penalty_loss(fake_data,real_data,disc):
+            alpha=tf.constant(random.random())
+            fake_data=list(fake_data)
+            differences = [f-r for f,r in zip(fake_data,real_data)]#fake_data - real_data
+            interpolates = [r + (alpha*d) for r,d in zip(real_data,differences)]
+            if len(fake_data)==1:
+                gradients = tf.gradients(disc(interpolates[0][0])[0], interpolates)
+            else:
+                gradients = tf.gradients(disc(interpolates)[0], interpolates)
+            gradient_penalty=0.0
+            for g in gradients:
+                slopes = tf.sqrt(tf.reduce_sum(tf.square(g)))
+                gradient_penalty += tf.reduce_mean((slopes-1.)**2)
+            return tf.nn.compute_average_loss([gradient_penalty], global_batch_size=GLOBAL_BATCH_SIZE)
+
 
         def generator_loss(fake_output):
             """
@@ -339,7 +360,7 @@ if __name__=='__main__':
 
         autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0002)
         generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
-        if WASSERSTEIN:
+        if WASSERSTEIN or GP:
             discriminator_optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.00005)
         else:
             discriminator_optimizer = tf.keras.optimizers.SGD()
@@ -353,7 +374,7 @@ if __name__=='__main__':
         else:
             autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM,batch_size=BATCH_SIZE_PER_REPLICA)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
-        discs=[conv_discrim(b,len(art_styles),attention=ATTENTION,wasserstein=WASSERSTEIN) for b in OUTPUT_BLOCKS]
+        discs=[conv_discrim(b,len(art_styles),wasserstein=WASSERSTEIN,gp=GP) for b in OUTPUT_BLOCKS]
         truth_value=tf.concat([d.output[0] for d in discs],-1)
         classification_value=tf.concat([d.output[1] for d in discs],-1)
         mega_disc=tf.keras.Model(inputs=[d.input for d in discs],outputs=[truth_value,classification_value])
@@ -384,6 +405,7 @@ if __name__=='__main__':
             gradients_of_generator = gen_tape.gradient(loss, gen.trainable_variables)
             generator_optimizer.apply_gradients(zip(gradients_of_generator, gen.trainable_variables))
         return sum(diversity_loss_list)
+
 
     @tf.function
     def train_step(images,gen_training,disc_training):
@@ -422,13 +444,21 @@ if __name__=='__main__':
             fake_output,fake_labels = mega_disc(generated_images, training=disc_training)
             
                 
-            if WASSERSTEIN==True:
+            if WASSERSTEIN or GP:
                 disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
                 disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
             else:
                 disc_loss_real = discriminator_loss_single(real_output,1)
                 disc_loss_fake =discriminator_loss_single(fake_output,0)
+
             _disc_loss= disc_loss_fake+disc_loss_real
+
+            if GP:
+                if len(discs)>1:
+                    gp=gradient_penalty_loss(authentic_images,generated_images,mega_disc)
+                else:
+                    gp=gradient_penalty_loss([authentic_images],[generated_images],mega_disc)
+                _disc_loss+=gp
 
             if gen_training == True:
                 _gen_loss= generator_loss(fake_output)

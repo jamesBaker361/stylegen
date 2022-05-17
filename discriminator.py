@@ -26,7 +26,7 @@ class ClipConstraint(Constraint):
 		return {'clip_value': self.clip_value}
 
 
-def conv_discrim(block,labels=0,attention=False,wasserstein=False):
+def conv_discrim(block,labels=0,wasserstein=False,gp=False):
     """[summary]
 
     Args:
@@ -67,7 +67,7 @@ def conv_discrim(block,labels=0,attention=False,wasserstein=False):
     z = layers.Dense(8)(x)
     z=layers.BatchNormalization()(z)
     z=layers.LeakyReLU()(z)
-    if wasserstein == True:
+    if wasserstein or gp:
         z=layers.Dense(1,activation="linear")(z)
     else:
         z = layers.Dense(1,activation='sigmoid')(z)
