@@ -180,8 +180,6 @@ if __name__=='__main__':
     WASSERSTEIN=args.wasserstein
     N_CRITIC=args.n_critic
     GP=args.gp
-    LAMBDA_GP=args.lambda_gp
-
     if GAMMA!=0:
         CONDITIONAL=True
         FLAT=True
@@ -756,7 +754,7 @@ if __name__=='__main__':
     print('test fid? ', FID)
     print("eagerly = ",tf.executing_eagerly())
     start=timer()
-    if WASSERSTEIN:
+    if WASSERSTEIN or GP:
         train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,n_critic=N_CRITIC)
     else:
         train(dataset,EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME)
