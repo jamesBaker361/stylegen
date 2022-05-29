@@ -36,38 +36,20 @@ def load_img(path_to_img, max_dim=256):
     img=tf.image.random_crop(img,size=(max_dim,max_dim,3))
     return img
 
-def load_img2(path_to_img,max_dim=256):
-    '''Loads an image from a file path, resizes it to a max_dim, and then converts it to a numpy array
+def vgg_layers(layer_names):
+    '''It takes a list of layer names and returns a model that returns the outputs of these layers given an
+    input image
     
     Parameters
     ----------
-    path_to_img
-        the path to the image you want to load.
-    max_dim, optional
-        the max image size in pixels
+    layer_names
+        The names of the layers we want to extract from the VGG19 model.
     
     Returns
     -------
-        an image array of the loaded image.
+        A model with the layers specified in layer_names.
     
     '''
-    image_array=cv2.imread(path_to_img)
-    h,w,c=image_array.shape
-    scale=max_dim/max(h,w)
-    reshaped_img=cv2.resize(image_array,(int(w*scale),int(h*scale)))
-    if h<w:
-        while h<w:
-            h,w,c =reshaped_img.shape
-            reshaped_img=cv2.vconcat([reshaped_img,reshaped_img])
-    else:
-        while w<h:
-            h,w,c=reshaped_img.shape
-            reshaped_img=cv2.hconcat([reshaped_img,reshaped_img])
-    return reshaped_img[0:max_dim,0:max_dim]
-
-def vgg_layers(layer_names):
-    """ Creates a vgg model that returns a list of intermediate output values."""
-    # Load our model. Load pretrained VGG, trained on imagenet data
     vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
     vgg.trainable = False
 
