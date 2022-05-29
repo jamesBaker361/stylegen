@@ -36,35 +36,6 @@ def load_img(path_to_img, max_dim=256):
     img=tf.image.random_crop(img,size=(max_dim,max_dim,3))
     return img
 
-def load_img2(path_to_img,max_dim=256):
-    '''Loads an image from a file path, resizes it to a max_dim, and then converts it to a numpy array
-    
-    Parameters
-    ----------
-    path_to_img
-        the path to the image you want to load.
-    max_dim, optional
-        the max image size in pixels
-    
-    Returns
-    -------
-        an image array of the loaded image.
-    
-    '''
-    image_array=cv2.imread(path_to_img)
-    h,w,c=image_array.shape
-    scale=max_dim/max(h,w)
-    reshaped_img=cv2.resize(image_array,(int(w*scale),int(h*scale)))
-    if h<w:
-        while h<w:
-            h,w,c =reshaped_img.shape
-            reshaped_img=cv2.vconcat([reshaped_img,reshaped_img])
-    else:
-        while w<h:
-            h,w,c=reshaped_img.shape
-            reshaped_img=cv2.hconcat([reshaped_img,reshaped_img])
-    return reshaped_img[0:max_dim,0:max_dim]
-
 def vgg_layers(layer_names):
     """ Creates a vgg model that returns a list of intermediate output values."""
     # Load our model. Load pretrained VGG, trained on imagenet data
@@ -121,7 +92,8 @@ def main(blocks):
     if use_styles==True:
         style_extractor = vgg_layers(style_layers)
     for style in artistic_styles:
-        imgs=[i for i in os.listdir('{}/{}'.format(img_dir,style)) if i.endswith('jpg')]
+        print(style)
+        imgs=[i for i in os.listdir('{}/{}'.format(img_dir,style)) if i.endswith('png')]
         for i in imgs:
             print('{}/{}'.format(c,count))
             c+=1

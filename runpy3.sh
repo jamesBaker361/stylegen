@@ -16,9 +16,9 @@
 
 #SBATCH --time=3-00:00:00           # Total run time limit (D-HH:MM:SS)
 
-#SBATCH --output=slurm/gpu/%j.out  # STDOUT output file
+#SBATCH --output=slurm/out/%j.out  # STDOUT output file
 
-#SBATCH --error=slurm/gpu/%j.err   # STDERR output file (optional)
+#SBATCH --error=slurm/err/%j.err   # STDERR output file (optional)
 
 #SBATCH --exclude=cuda001
 
