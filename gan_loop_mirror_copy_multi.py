@@ -20,7 +20,7 @@ from autoencoderscopy import aegen,extract_generator
 noise_dim=noise_dim_dcgan
 from discriminator import conv_discrim
 
-from data_loader import get_dataset_gen_slow,get_real_imgs_fid,get_dataset_gen_slow_labels
+from data_loader import get_real_imgs_fid,get_dataset_gen_slow_labels
 from timeit import default_timer as timer
 from keras.applications.inception_v3 import InceptionV3
 from fid_metric import calculate_fid
@@ -126,6 +126,7 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format(n_critic_str),help="how many times to train the discriminator than the generator",type=int,default=5)
     parser.add_argument('--{}'.format("gp"),type=bool,default=False,help="gradient penalty loss")
     parser.add_argument('--{}'.format("lambda_gp"),type=float,default=10.0,help="coefficient on gradient penalty")
+    parser.add_argument('--{}'.format("styles"),nargs="+",default=all_styles)
 
     args = parser.parse_args()
 
@@ -217,15 +218,7 @@ if __name__=='__main__':
     print('{} * {} = {}'.format(BATCH_SIZE_PER_REPLICA,strategy.num_replicas_in_sync,GLOBAL_BATCH_SIZE))
 
     genres=all_genres_art 
-    art_styles=all_styles
-    if arg_vars[human_str] is not None:
-        genres=[1,3,7,9] #lotta humans 
-    elif arg_vars[baroque_str] is not None:
-        art_styles=['baroque','romanticism']
-    elif arg_vars[renn_str] is not None:
-        art_styles=['early-renaissance','high-renaissance','mannerism-late-renaissance','northern-renaissance']
-    elif arg_vars[ukiyo_str] is not None:
-        art_styles=['ukiyo-e']
+    art_styles=args.styles
 
     #global one_hot
     one_hot=OneHotEncoder()
@@ -358,7 +351,7 @@ if __name__=='__main__':
         decay_rate = 0.9
         learning_rate_fn = tf.keras.optimizers.schedules.InverseTimeDecay(initial_learning_rate, decay_steps, decay_rate)
 
-        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0002)
+        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.02)
         generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
         if WASSERSTEIN or GP:
             discriminator_optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.00005)
