@@ -15,6 +15,7 @@ from rescaling import Rescaling
 
 from other_globals import *
 from generator import *
+from dc_autoencoders import dc_decoder,dc_encoder
 
  #the dim of latent space is dim is 1-D
 
@@ -61,6 +62,7 @@ def get_encoder(inputs,input_dim,residual, attention=False,
     while x.shape[-2]>2:
         if x.shape[-2]<64 and attention==True:
             x=attn_block(x)
+        channels = x.shape[-1]
         if channels<64:
             channels=channels*2
         x = layers.Conv2D(channels, (3, 3), (1, 1))(x)
@@ -71,7 +73,7 @@ def get_encoder(inputs,input_dim,residual, attention=False,
             x = ResNextBlock(kernel_size=(4, 4))(x)
     while x.shape[-1]>64:
         channels = x.shape[-1]//2
-        x=layer.Conv2D(channels,(1,1),(1,1))(x)
+        x=layers.Conv2D(channels,(1,1),(1,1))(x)
         x=normalization()(x)
         x=layers.LeakyReLU()(x)
 
@@ -127,19 +129,26 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
     x=Rescaling(255,name='img_output')(x)
     return tk.Model(inputs=inputs,outputs=x,name='decoder')
 
-def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0,batch_size=1):
+def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0,dc_enc=False,dc_dec=False):
     input_shape=input_shape_dict[block]
     inputs = tk.Input(shape=input_shape)
     flat_latent_dim=base_flat_noise_dim+len(art_styles)
     print(inputs.shape)
-    x=get_encoder(inputs,input_shape,residual,
+    if dc_enc:
+        encoder=dc_encoder(input_shape,base_flat_noise_dim)
+        x=encoder(inputs)
+    else:
+        x=get_encoder(inputs,input_shape,residual,
         noise_weight=noise_weight,base_flat_noise_dim=base_flat_noise_dim,norm=norm)
     if noise_weight!=0:
         x=GaussianNoise(noise_weight)(x)
     if len(art_styles)>0:
         class_inputs=tk.Input(shape=(len(art_styles)))
         x=tf.concat([x,class_inputs],axis=-1)
-    dec=make_decoder(x.shape[1:],residual,attention,flat_latent_dim,norm=norm)
+    if dc_dec:
+        dec=dc_decoder(flat_latent_dim)
+    else:
+        dec=make_decoder(x.shape[1:],residual,attention,flat_latent_dim,norm=norm)
     x=dec(x)
     x=tk.applications.vgg19.preprocess_input(x)
     if output_blocks==[]:
@@ -180,7 +189,7 @@ def extract_generator(model,block,output_blocks):
 if __name__=='__main__':
     for block in input_shape_dict.keys():
         output_blocks=[]
-        model=aegen(block,output_blocks=output_blocks,base_flat_noise_dim=4,art_styles=['baroque','impressionism'],norm="batch")
+        model=aegen(block,output_blocks=output_blocks,base_flat_noise_dim=4,art_styles=['baroque','impressionism'],norm="batch",dc_enc=True,dc_dec=True)
         print(model.input_shape)
         print(block, model.output_shape)
         gen=extract_generator(model,block,output_blocks)

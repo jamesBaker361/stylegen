@@ -93,7 +93,7 @@ def main(blocks):
         style_extractor = vgg_layers(style_layers)
     for style in artistic_styles:
         print(style)
-        imgs=[i for i in os.listdir('{}/{}'.format(img_dir,style)) if i.endswith('png')]
+        imgs=[i for i in os.listdir('{}/{}'.format(img_dir,style)) if i.endswith(('jpg','png','PNG','JPG'))]
         for i in imgs:
             print('{}/{}'.format(c,count))
             c+=1

@@ -127,6 +127,8 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format("gp"),type=bool,default=False,help="gradient penalty loss")
     parser.add_argument('--{}'.format("lambda_gp"),type=float,default=10.0,help="coefficient on gradient penalty")
     parser.add_argument('--{}'.format("styles"),nargs="+",default=all_styles)
+    parser.add_argument('--{}'.format("dc"),type=bool,default=False,help="whetehr to use dcgan architecture")
+    parser.add_argument('--{}'.format("base_flat_noise_dim"),type=int,default=64,help="dimensionality of flat latent space")
 
     args = parser.parse_args()
 
@@ -351,7 +353,7 @@ if __name__=='__main__':
         decay_rate = 0.9
         learning_rate_fn = tf.keras.optimizers.schedules.InverseTimeDecay(initial_learning_rate, decay_steps, decay_rate)
 
-        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.02)
+        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.05)
         generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
         if WASSERSTEIN or GP:
             discriminator_optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.00005)
@@ -360,12 +362,16 @@ if __name__=='__main__':
 
         flat_latent_dim=0
         if FLAT==True:
-            flat_latent_dim=base_flat_noise_dim
-        if CONDITIONAL == True:
+            flat_latent_dim=args.base_flat_noise_dim
+        if CONDITIONAL == True and args.dc==False:
             flat_latent_dim+=len(art_styles)
-            autoenc=aegen(BLOCK,base_flat_noise_dim=base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM,batch_size=BATCH_SIZE_PER_REPLICA)
+            autoenc=aegen(BLOCK,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM)
+        elif args.dc and CONDITIONAL==False:
+            autoenc=aegen(BLOCK,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM,dc_enc=True,dc_dec=True)
+        elif args.dc and CONDITIONAL:
+            autoenc=aegen(BLOCK,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM,dc_enc=True,dc_dec=True)
         else:
-            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM,batch_size=BATCH_SIZE_PER_REPLICA)
+            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
         discs=[conv_discrim(b,len(art_styles),wasserstein=WASSERSTEIN,gp=GP) for b in OUTPUT_BLOCKS]
         truth_value=tf.concat([d.output[0] for d in discs],-1)
@@ -425,7 +431,7 @@ if __name__=='__main__':
         with tf.GradientTape(persistent=True) as gen_tape, tf.GradientTape(persistent=True) as disc_tape:
 
             if CONDITIONAL == True:
-                generic_noise=tf.random.normal([batch_size,base_flat_noise_dim])
+                generic_noise=tf.random.normal([batch_size,args.base_flat_noise_dim])
                 art_style_encoding_list=tf.random.uniform([batch_size,len(art_styles)],minval=0,maxval=1)
                 noise=tf.concat([generic_noise,art_style_encoding_list],axis=-1)
             else:

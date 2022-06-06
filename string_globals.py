@@ -1,7 +1,7 @@
 
 import os
-npz_root='../../../../../scratch/jlb638/animeGAN/imgs_npz' #where the npz matrices are; CHANGE THIS FOR UR OWN USES
-img_dir='../../../../../scratch/jlb638/moeimouto-faces/moeimouto-faces' #where the actual images themselves are; CHANGE THIS
+npz_root='../../../../../scratch/jlb638/animeGAN/highres/imgs_npz' #where the npz matrices are; CHANGE THIS FOR UR OWN USES
+img_dir='../../../../../scratch/jlb638/highres-anime-face' #where the actual images themselves are; CHANGE THIS
 checkpoint_dir='../../../../../scratch/jlb638/animeGAN/checkpoints' #where saved models are stored CHANGE THIS FOR YOUR OWN PURPOSES
 all_styles=[s for s in os.listdir('{}'.format(img_dir)) if s[0]!='.']
 open_img_dir='../../../../../scratch/jlb638/open-imgs' #this is another image dataset
