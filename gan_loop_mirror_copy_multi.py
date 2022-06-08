@@ -32,6 +32,7 @@ import random
 from sklearn.preprocessing import OneHotEncoder
 
 from tensorflow.python.framework.ops import disable_eager_execution
+from tensorflow.python.framework.errors_impl import ResourceExhaustedError
 
 #disable_eager_execution()
 
@@ -353,12 +354,12 @@ if __name__=='__main__':
         decay_rate = 0.9
         learning_rate_fn = tf.keras.optimizers.schedules.InverseTimeDecay(initial_learning_rate, decay_steps, decay_rate)
 
-        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.05)
-        generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
+        autoencoder_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0005)
+        generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.005, beta_1=0.5)
         if WASSERSTEIN or GP:
             discriminator_optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.00005)
         else:
-            discriminator_optimizer = tf.keras.optimizers.SGD()
+            discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5)
 
         flat_latent_dim=0
         if FLAT==True:
@@ -539,32 +540,6 @@ if __name__=='__main__':
 
     #@tf.function
     def train(dataset,epochs=EPOCHS,picture=True,ae_epochs=AE_EPOCHS,pre_train_epochs=PRE_EPOCHS,name=NAME,one_hot=one_hot,save_gen=True,save_disc=True,n_critic=1):
-        '''It trains the model
-        
-        Parameters
-        ----------
-        dataset
-            the dataset to train on
-        epochs
-            the number of epochs to train for
-        picture, optional
-            if True, saves generated images
-        ae_epochs
-            the number of epochs to train the autoencoder for
-        pre_train_epochs
-            the number of epochs to train the discriminator before training the generator
-        name
-            the name of the model
-        one_hot
-            whether or not to use one hot encoding for the labels
-        save_gen, optional
-            whether to save the generator
-        save_disc, optional
-            whether to save the discriminator
-        n_critic, optional
-            the number of discriminator updates per generator update
-        
-        '''
         check_dir_auto='./{}/{}/{}'.format(checkpoint_dir,name,'auto')
         check_dir_gen='./{}/{}/{}'.format(checkpoint_dir,name,'gen')
         check_dir_disc_list=['./{}/{}/{}/{}'.format(checkpoint_dir,name,'disc',b) for b in OUTPUT_BLOCKS]
@@ -597,7 +572,11 @@ if __name__=='__main__':
                 start=timer()
                 i=0
                 for images in dataset:
-                    ae_loss=train_step_dist_ae(images)
+                    try:
+                        ae_loss=train_step_dist_ae(images)
+                    except ResourceExhaustedError:
+                        print("OOM! batch_size per replica: {} len blocks: {} base_flat_noise_dim: {}".format(BATCH_SIZE_PER_REPLICA, len(discs), args.base_flat_noise_dim))
+                        exit()
                     avg_auto_loss+=ae_loss/LIMIT
                     if i%100==0:
                         print('\tbatch {} autoencoder loss {}'.format(i,ae_loss))
@@ -614,7 +593,6 @@ if __name__=='__main__':
         avg_disc_loss_history=[]
         avg_gen_loss_history=[]
         avg_diversity_loss_history=[]
-        avg_class_loss_history=[]
         check_dir_disc=check_dir_disc_list[0]
         disc_ckpt_paths=get_checkpoint_paths(check_dir_disc)
         if pre_train_epochs>0 and (len(disc_ckpt_paths)==0 or NO_LOAD==True):
@@ -624,7 +602,11 @@ if __name__=='__main__':
                 i=0
                 for images in dataset:
                     #for images in image_tuples:
-                    disc_loss,_,__=train_step_dist(images,gen_training=False,disc_training=True)
+                    try:
+                        disc_loss,_,__=train_step_dist(images,gen_training=False,disc_training=True)
+                    except ResourceExhaustedError:
+                        print("OOM! batch_size per replica: {} len blocks: {} base_flat_noise_dim: {}".format(BATCH_SIZE_PER_REPLICA, len(discs), args.base_flat_noise_dim))
+                        exit()
                     if i % 100 == 0:
                         print('\tbatch {} disc loss {}'.format(i,disc_loss))
                     avg_disc_loss+=disc_loss/LIMIT
@@ -694,7 +676,11 @@ if __name__=='__main__':
                 else:
                     gen_training=False
                     diversity_training=False
-                disc_loss,gen_loss,class_label_loss=train_step_dist(images,gen_training,disc_training)
+                try:
+                    disc_loss,gen_loss,class_label_loss=train_step_dist(images,gen_training,disc_training)
+                except ResourceExhaustedError:
+                    print("OOM! batch_size per replica: {} len blocks: {} base_flat_noise_dim: {}".format(BATCH_SIZE_PER_REPLICA, len(discs), args.base_flat_noise_dim))
+                    exit()
                 if diversity_training:
                     div_loss=train_step_dist_div()
                 else:

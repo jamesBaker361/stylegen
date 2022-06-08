@@ -96,9 +96,10 @@ def dc_decoder(latent_dim,filters = 32,output_strides = 16):
         strides=1,
         activation=False
     )
-    fake_output = Activation("tanh")(x)
+    x = Activation("tanh")(x)
+    x=Rescaling(255,offset=127.5,name='img_output')(x)
 
-    return Model(noise, fake_output, name="decoder")
+    return Model(noise, x, name="decoder")
 
 if __name__ == "__main__":
     dec=dc_decoder(1024)

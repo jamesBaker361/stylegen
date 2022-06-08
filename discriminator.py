@@ -25,6 +25,7 @@ class ClipConstraint(Constraint):
 	def get_config(self):
 		return {'clip_value': self.clip_value}
 
+w_init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
 
 def conv_discrim(block,labels=0,wasserstein=False,gp=False):
     """[summary]
@@ -48,14 +49,14 @@ def conv_discrim(block,labels=0,wasserstein=False,gp=False):
     else:
         constraint=Constraint()
 
-    x= layers.Conv2D(conv1_dim,(4,4),(2,2),padding='same',kernel_constraint=constraint)(inputs)
+    x= layers.Conv2D(conv1_dim,(3,3),(2,2),padding='same',kernel_constraint=constraint,kernel_initializer=w_init)(inputs)
     x=layers.BatchNormalization()(x)
     x=layers.LeakyReLU()(x)
     x=layers.Dropout(.2)(x)
 
     for _ in range(3):
         #x = ResNextBlock(kernel_size=(4, 4))(x)
-        x= layers.Conv2D(max(x.shape[-1] //2,4),(4,4),(2,2),padding='same',kernel_constraint=constraint)(x)
+        x= layers.Conv2D(max(x.shape[-1] //2,4),(3,3),(2,2),padding='same',kernel_constraint=constraint,kernel_initializer=w_init)(x)
         x=layers.BatchNormalization()(x)
         x=layers.LeakyReLU()(x)
         x=layers.Dropout(.2)(x)
