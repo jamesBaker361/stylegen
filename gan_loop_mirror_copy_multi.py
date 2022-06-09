@@ -359,7 +359,7 @@ if __name__=='__main__':
         if WASSERSTEIN or GP:
             discriminator_optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.00005)
         else:
-            discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5)
+            discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00025, beta_1=0.5)
 
         flat_latent_dim=0
         if FLAT==True:
@@ -712,7 +712,7 @@ if __name__=='__main__':
                     os.makedirs(save_dir)
                 #disc.save_weights(save_dir+'cp.ckpt')
             if picture is True: #creates generated images
-                for suffix in ['i','ii','iii']:
+                for suffix in ['i','ii']:
                     noise = tf.random.normal([1, *interm_noise_dim])
                     #gen_img=intermediate_model(noise)
                     gen_img=intermediate_model(noise).numpy()[0]

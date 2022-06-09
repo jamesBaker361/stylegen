@@ -51,7 +51,9 @@ class ConvOffset(Layer): #1 x1 convolution offset from the top somehow
 
             
         
-
+class Positional(Layer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
 class ConvBundle(Layer):
@@ -61,9 +63,9 @@ class ConvBundle(Layer):
         self.cout=cout
         self.conv_matrix=[[None for y in range(kernel_size)] for x in range(kernel_size)]
         self.dense_matrix=[[None for y in range(kernel_size)] for x in range(kernel_size)]
-        self.positional=positional
+        """self.positional=positional
         if positional:
-            self.positional_matrix=[[None for y in range(kernel_size)] for x in range(kernel_size)]
+            self.positional_matrix=[[None for y in range(kernel_size)] for x in range(kernel_size)]"""
         if input_shape!=None:
             self.build(input_shape)
         else:
@@ -82,9 +84,9 @@ class ConvBundle(Layer):
             for y in range(self.kernel_size):
                 d=Dense(self.cout,use_bias=False)
                 self.dense_matrix[x][y]=d
-                if self.positional:
+                """if self.positional:
                     d_p=Dense(self.cout,use_bias=False)
-                    self.positional_matrix[x][y]=d_p
+                    self.positional_matrix[x][y]=d_p"""
                 conv=Conv2D(self.cout,(self.kernel_size,self.kernel_size),padding="same",trainable=False)
                 conv.build(input_shape)
                 k=np.zeros((self.kernel_size,self.kernel_size,self.cin,self.cout))
@@ -107,7 +109,7 @@ class ConvBundle(Layer):
                     """if self.positional:
                         output+=self.positional_matrix[x][y](inputs)"""
                     output_matrix[x][y]=output
-            reshaped=tf.concat(output_matrix,axis=1)
+            #reshaped=tf.concat(output_matrix,axis=1)
             return tf.convert_to_tensor(output_matrix)
         #return _call(inputs)
         if len(shape)==3:
@@ -118,10 +120,14 @@ class ConvBundle(Layer):
 
 
 class SASA(Layer):
-    def __init__(self,kernel_size,cout,input_shape=None,*args, **kwargs):
+    def __init__(self,kernel_size,cout,use_positional=True,input_shape=None,*args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cout=cout
         self.kernel_size=kernel_size
+        self.offset_kernel_size=self.kernel_size+1
+        self.offset_kernel_size=self.offset_kernel_size //2
+        self.offset_index=self.offset_kernel_size-1
+        self.use_positional=use_positional
         if input_shape!=None:
             self.build(input_shape)
         else:
@@ -130,11 +136,9 @@ class SASA(Layer):
     def build(self, input_shape):
         if self.built:
             return
-        self.offset_kernel_size=self.kernel_size+1
-        self.offset_kernel_size=self.offset_kernel_size //2
-        self.offset_index=self.offset_kernel_size-1
         self.query=ConvOffset(self.offset_kernel_size,self.cout,self.offset_index,self.offset_index)
-        #self.positional=tf.Variable(shape=(self.kernel_size,self.kernel_size,self.cout))
+        if self.use_positional:
+            self.positional=tf.Variable(initial_value=tf.random.normal((self.kernel_size,self.kernel_size,self.cout)))
         self.values=ConvBundle(self.kernel_size,self.cout,input_shape=input_shape)
         self.keys=ConvBundle(self.kernel_size,self.cout,input_shape=input_shape)
         self.built=True
@@ -143,8 +147,6 @@ class SASA(Layer):
         shape=tf.shape(inputs)
         if len(shape)==3:
             inputs=tf.expand_dims(inputs,0)
-        if self.built==False:
-            self.build(shape)
         shape=tf.shape(inputs)
         (b,h,w,c)=shape
         inputs=tf.image.pad_to_bounding_box(
@@ -155,10 +157,16 @@ class SASA(Layer):
             w+self.offset_index)
         shape=tf.shape(inputs)
         (b,h,w,c)=shape
+        if self.built==False:
+            self.build(shape)
+        
         q=self.query(inputs)
         v=self.values(inputs)
         k=self.keys(inputs)
         kq_product=tf.einsum("pqbijc,bijc->pqbijc",k,q)
+        if self.use_positional:
+            pq_product=tf.einsum("pqc,bijc->pqbijc",self.positional,q)
+            kq_product=kq_product+pq_product
         c=tf.shape(kq_product)[-1]
         kq_product=tf.reshape(kq_product,(self.kernel_size**2,b*h*w*c))
         kq_product=tf.nn.softmax(kq_product,axis=0)
@@ -168,7 +176,15 @@ class SASA(Layer):
         product=tf.image.crop_to_bounding_box(product,0,0,h-self.offset_index,w-self.offset_index)
         return product
 
-        
+class SASA_MHA(SASA):
+    def __init__(self,kernel_size,cout,num_heads,use_positional=True,input_shape=None, *args, **kwargs):
+        assert cout % num_heads ==0
+        super().__init__(kernel_size,cout,use_positional,input_shape,*args, **kwargs)
+        self.channels_per_head=cout // num_heads
+        heads=[SASA(kernel_size,self.channels_per_head,use_positional=use_positional)]
+
+
+
 
 
         
@@ -185,6 +201,6 @@ if __name__=="__main__":
     inputs=tf.random.uniform((7,16,16,3))
     outputs=bundle(inputs)
     print(outputs.shape)
-    sas=SASA(5,32,(1,16,16,3))
+    sas=SASA(6,32,input_shape=(1,16,16,3))
     sas_out=sas(inputs)
     print(sas_out.shape)
