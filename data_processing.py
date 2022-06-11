@@ -23,7 +23,7 @@ def load_img(path_to_img, max_dim=256):
     '''
     img = tf.io.read_file(path_to_img)
     img = tf.image.decode_image(img, channels=3)
-    img = tf.image.convert_image_dtype(img, tf.float32)
+    #img = tf.image.convert_image_dtype(img, tf.float32)
 
     shape = tf.cast(tf.shape(img)[:-1], tf.float32)
     long_dim = min(shape)
@@ -32,7 +32,7 @@ def load_img(path_to_img, max_dim=256):
     new_shape = tf.cast(1+(shape * scale), tf.int32)
     print(new_shape)
 
-    img = tf.image.resize(img, new_shape,method='lanczos5')
+    img = tf.image.resize(img, new_shape,method='bilinear')
     img=tf.image.random_crop(img,size=(max_dim,max_dim,3))
     return img
 
@@ -104,7 +104,7 @@ def main(blocks):
                 print(img_path)
                 continue
             img_tensor=tf.constant(img)
-            img_tensor=255*tf.reshape(img_tensor,(1, *img_tensor.shape))
+            img_tensor=tf.reshape(img_tensor,(1, *img_tensor.shape))
             if use_styles==True:
                 img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
                 style_outputs = style_extractor(img_tensor)

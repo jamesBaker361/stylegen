@@ -27,7 +27,6 @@ from fid_metric import calculate_fid
 from graph_loss import data_to_csv
 from gif_making import *
 from helpers import *
-from transfer import *
 import random
 from sklearn.preprocessing import OneHotEncoder
 
@@ -719,7 +718,7 @@ if __name__=='__main__':
                     new_img_path='{}/epoch_{}_{}.jpg'.format(picture_dir,epoch,suffix)
                     #image_tensors.append(gen_img)
                     #image_paths.append(new_img_path)
-                    cv2.imwrite(new_img_path,gen_img)
+                    tf.keras.utils.save_img(new_img_path,gen_img)
                     #print('the file exists == {}'.format(os.path.exists(new_img_path)))
     
     dataset=get_dataset_gen_slow_labels(OUTPUT_BLOCKS,GLOBAL_BATCH_SIZE,one_hot,LIMIT,art_styles,genres)
