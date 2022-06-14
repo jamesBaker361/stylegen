@@ -5,6 +5,7 @@ img_dir='../../../../../scratch/jlb638/highres-anime-face' #where the actual ima
 checkpoint_dir='../../../../../scratch/jlb638/animeGAN/checkpoints' #where saved models are stored CHANGE THIS FOR YOUR OWN PURPOSES
 all_styles=[s for s in os.listdir('{}'.format(img_dir)) if s[0]!='.']
 open_img_dir='../../../../../scratch/jlb638/open-imgs' #this is another image dataset
+no_block_raw="no_block_raw"
 no_block='no_block' #these are just normal images
 block1_conv1 ='block1_conv1'
 block1_conv2 ='block1_conv2'

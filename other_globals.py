@@ -2,6 +2,7 @@ from string_globals import *
 image_dim=(256,256,3)
 
 input_shape_dict={ #shape of input to discriinator
+no_block_raw:image_dim,
     no_block: image_dim,
     block1_conv1:(256, 256, 64),
     block2_conv1:(128,128,128),
@@ -11,6 +12,7 @@ input_shape_dict={ #shape of input to discriinator
 }
 
 input_shape_dict_big={
+    no_block_raw:image_dim,
     no_block: image_dim ,
 block1_conv1 : (256, 256, 64) ,
 block1_conv2 : (256, 256, 64) ,

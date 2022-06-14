@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 from string_globals import *
 from other_globals import *
+from tensorflow.keras.layers import *
 
 def load_img(path_to_img, max_dim=256):
     '''Loads the image from the given path, scales it to a square, and randomly crops a square of the given
@@ -36,8 +37,8 @@ def load_img(path_to_img, max_dim=256):
     img=tf.image.random_crop(img,size=(max_dim,max_dim,3))
     return img
 
-def vgg_layers(layer_names):
-    """ Creates a vgg model that returns a list of intermediate output values."""
+"""def vgg_layers(layer_names,no_block_pre=True,):
+     Creates a vgg model that returns a list of intermediate output values.
     # Load our model. Load pretrained VGG, trained on imagenet data
     vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
     vgg.trainable = False
@@ -45,7 +46,58 @@ def vgg_layers(layer_names):
     outputs = [vgg.get_layer(name).output if name != no_block else vgg.layers[0].output for name in layer_names ]
 
     model = tf.keras.Model([vgg.input], outputs)
-    return model
+    return model"""
+
+class VGGPreProcess(Layer):
+    def __init__(self,*args,**kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    def build(self, input_shape):
+        return super().build(input_shape)
+
+    def call(self,inputs):
+        return tf.keras.applications.vgg19.preprocess_input(inputs)
+
+class Identity(Layer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def build(self, input_shape):
+        return super().build(input_shape)
+
+    def call(self, inputs, *args, **kwargs):
+        return inputs
+
+def vgg_layers(layer_names,input_shape=image_dim):
+    vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet',input_shape=input_shape)
+    vgg.trainable = False
+    inputs=tf.keras.Input(shape=input_shape)
+    identity=Identity(name=no_block_raw)
+    preproc=VGGPreProcess(name=no_block)
+    #x=vgg(x)
+
+    #model.layer_names=set([no_block,no_block_raw])
+
+    def clone_layer(layer):
+        config = layer.get_config()
+        weights = layer.get_weights()
+        cloned_layer = type(layer).from_config(config)
+        cloned_layer.build(layer.input_shape)
+        cloned_layer.set_weights(weights)
+        return cloned_layer
+
+    layers=[inputs,identity,preproc]
+    for layer in vgg.layers[1:]:
+        layers.append(clone_layer(layer))
+
+    model= tf.keras.Sequential(layers)
+    #vgg=Concatenate()([inputs,preprocess,vgg])
+    #if name in model.layer_names else model.layers[-1].get_layer(name).output
+
+    outputs = [model.get_layer(name).output for name in layer_names ]
+
+    return tf.keras.Model(model.input, outputs)
+
 
 def get_img_paths(artistic_styles=[]):
     '''Given a list of artistic styles, return a list of all the image paths in the img_dir directory
@@ -84,13 +136,7 @@ def main(blocks):
     count=len(get_img_paths(artistic_styles))
     c=0
     style_layers = blocks #,'block2_conv1']
-    use_styles=True
-    if no_block in set(blocks):
-        use_styles=False
-    style_extractor={}
-    print(use_styles)
-    if use_styles==True:
-        style_extractor = vgg_layers(style_layers)
+    style_extractor = vgg_layers(style_layers)
     for style in artistic_styles:
         print(style)
         imgs=[i for i in os.listdir('{}/{}'.format(img_dir,style)) if i.endswith(('jpg','png','PNG','JPG'))]
@@ -105,11 +151,8 @@ def main(blocks):
                 continue
             img_tensor=tf.constant(img)
             img_tensor=tf.reshape(img_tensor,(1, *img_tensor.shape))
-            if use_styles==True:
-                img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
-                style_outputs = style_extractor(img_tensor)
-            else:
-                style_outputs=[img_tensor]
+            img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
+            style_outputs = style_extractor(img_tensor)
             for layer,output in zip(style_layers,style_outputs):
                 out_dir='{}/{}/{}'.format(npz_root,layer,style)
                 if not os.path.exists(out_dir):
@@ -128,6 +171,14 @@ def main(blocks):
             
 
 if __name__ == '__main__':
+    """    path="../../../../../scratch/jlb638/highres-anime-face/portraits/25613101.jpg"
+    img=load_img(path)
+    img_tensor=tf.constant(img)
+    img_tensor=tf.reshape(img_tensor,(1, *img_tensor.shape))
+    model=vgg_layers([no_block_raw,no_block,block5_conv1])
+    model.summary()
+    model(img_tensor)
+    exit()"""
     blocks=[]
     for arg in set(sys.argv):
         if arg in input_shape_dict:

@@ -37,7 +37,7 @@ def data_gen_slow_labels(blocks,flat_list,one_hot):
         for path in flat_list:
             npz_object=np.load(path)
             features=npz_object['features']
-            ''' these should all be no_block but technically they COULD be any block
+            ''' these should all be no_block_raw but technically they COULD be any block
             like it would be redundant to run a the output of  a feature layer through vgg but we could
             '''
             features=tf.keras.applications.vgg19.preprocess_input(features)
@@ -95,7 +95,7 @@ def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real
     '''
     if len(styles)==0:
         styles=[s for s in os.listdir('{}/{}'.format(npz_root,block)) if s[0]!='.']
-    flat_list=get_all_img_paths(no_block,styles)
+    flat_list=get_all_img_paths(no_block_raw,styles)
     random.shuffle(flat_list)
     flat_list=flat_list[:limit]
     all_features=[]
