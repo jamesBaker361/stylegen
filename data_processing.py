@@ -151,7 +151,7 @@ def main(blocks):
                 continue
             img_tensor=tf.constant(img)
             img_tensor=tf.reshape(img_tensor,(1, *img_tensor.shape))
-            img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
+            #img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
             style_outputs = style_extractor(img_tensor)
             for layer,output in zip(style_layers,style_outputs):
                 out_dir='{}/{}/{}'.format(npz_root,layer,style)

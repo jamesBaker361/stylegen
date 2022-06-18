@@ -10,13 +10,21 @@ from data_processing import vgg_layers
 from sklearn.preprocessing import OneHotEncoder
 
 
-def get_all_img_paths(block,styles,genres): #gets all image path of images of style/genre (default)
-    '''
+def get_all_img_paths(block,styles): #gets all image path of images of style/genre (default)
+    '''It takes a block and a list of styles and returns a list of all the image paths in that block and
+    style
+    
     Parameters
     ----------
-    block -- str.
-    styles --[str].
-    genres -- [int].
+    block
+        the block of the dataset you want to use.
+    styles
+        list of genres
+    
+    Returns
+    -------
+        a list of all the paths of the images in the given block and style.
+    
     '''
     ret=[]
     for s in styles:
@@ -40,8 +48,10 @@ def data_gen_slow_labels(blocks,flat_list,one_hot):
             ''' these should all be no_block_raw but technically they COULD be any block
             like it would be redundant to run a the output of  a feature layer through vgg but we could
             '''
-            features=tf.keras.applications.vgg19.preprocess_input(features)
+            #features=tf.keras.applications.vgg19.preprocess_input(features)
             artistic_style_encoding=one_hot.transform([[str(npz_object['style'])]]).toarray()[0]
+            if len(features.shape)==3:
+                features=tf.expand_dims(features,0)
             if len(blocks)==1:
                 yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
             else:
@@ -66,7 +76,7 @@ def get_dataset_gen_slow_labels(blocks,batch_size, one_hot,limit=5000,styles=all
 
     dataset -- tf.data.Dataset.
     '''
-    flat_list=get_all_img_paths(no_block,styles,genres) #no_block
+    flat_list=get_all_img_paths(no_block_raw,styles) #no_block
     random.shuffle(flat_list)
     flat_list=flat_list[:limit]
     flat_list=flat_list[:batch_size*(len(flat_list)//batch_size)]
@@ -111,7 +121,7 @@ if __name__=='__main__':
     
     styles=["079_teana_lanster","197_illyasviel_von_einzbern"]
     one_hot=OneHotEncoder()
-    one_hot.fit([[s] for s in styles])
-    dataset=get_dataset_gen_slow_labels([no_block,block1_conv1],3,one_hot,limit=10,styles=styles)
+    one_hot.fit([[s] for s in all_styles])
+    dataset=get_dataset_gen_slow_labels([no_block_raw],3,one_hot,limit=10)
     for d in dataset:
         print(d)
