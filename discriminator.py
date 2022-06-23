@@ -6,7 +6,7 @@ from group_norm import GroupNormalization
 from resnext import ResNextBlock
 from keras.constraints import Constraint
 
-from data_processing import vgg_layers
+from dc_components import *
 from generator import *
 
 from other_globals import *
@@ -25,20 +25,8 @@ class ClipConstraint(Constraint):
 	def get_config(self):
 		return {'clip_value': self.clip_value}
 
-w_init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
 
 def conv_discrim(block,labels=0,wasserstein=False,gp=False):
-    """[summary]
-
-    Args:
-    -----
-        block ([str]): [description]
-        labels (int, optional): [description]. Defaults to 0.
-
-    Returns:
-    ------
-        tf.keras.Model : the discriminator; returns either value between 0-1, and if labels>0, a classification vector [0,0,0,,,1,,0]
-    """
     input_shape=input_shape_dict[block]
     inputs=layers.Input(shape=input_shape)
 
@@ -86,9 +74,25 @@ def conv_discrim(block,labels=0,wasserstein=False,gp=False):
 
     return tk.Model(inputs=inputs, outputs=[z,y])
 
+def dc_discriminator(block):
+    input_shape=input_shape_dict[block]
+    f = [2**i for i in range(4)]
+    image_input = layers.Input(shape=input_shape)
+    x = image_input
+    filters = 64
+    output_strides = 16
+    h_output = IMG_H // output_strides
+    w_output = IMG_W // output_strides
 
+    for i in range(0, 4):
+        x = conv_block(x, num_filters=f[i] * filters, kernel_size=5, strides=2)
+
+    x = layers.Flatten()(x)
+    x = layers.Dense(1)(x)
+
+    return Model(image_input, x, name="discriminator")
 
 if __name__ =='__main__':
-    model=conv_discrim(block1_conv1,0)
+    model=dc_discriminator(block1_conv1)
     model.summary()
     print(model(tf.random.normal([1, * input_shape_dict[block1_conv1]])))

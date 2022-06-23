@@ -1,42 +1,15 @@
+from tensorflow.keras.applications import VGG19
 from string_globals import *
-image_dim=(256,256,3)
+IMG_H=256
+IMG_W=256
+IMG_C=3
+image_dim=(IMG_H,IMG_W,IMG_C)
+vgg = VGG19(include_top=False, weights='imagenet',input_shape=image_dim)
 
-input_shape_dict={ #shape of input to discriinator
-no_block_raw:image_dim,
-    no_block: image_dim,
-    block1_conv1:(256, 256, 64),
-    block2_conv1:(128,128,128),
-    block3_conv1: (64,64,256),
-    block4_conv1: (32,32,512),
-    block5_conv1: (16,16,512)
-}
+input_shape_dict={l.name:l.input_shape[1:] for l in vgg.layers}
+input_shape_dict[no_block]=image_dim
+input_shape_dict[no_block_raw]=image_dim
 
-input_shape_dict_big={
-    no_block_raw:image_dim,
-    no_block: image_dim ,
-block1_conv1 : (256, 256, 64) ,
-block1_conv2 : (256, 256, 64) ,
-block1_pool : (128, 128, 64) ,
-block2_conv1 : (128, 128, 128) ,
-block2_conv2 : (128, 128, 128) ,
-block2_pool : (64, 64, 128) ,
-block3_conv1 : (64, 64, 256) ,
-block3_conv2 : (64, 64, 256) ,
-block3_conv3 : (64, 64, 256) ,
-block3_conv4 : (64, 64, 256) ,
-block3_pool : (32, 32, 256) ,
-block4_conv1 : (32, 32, 512) ,
-block4_conv2 : (32, 32, 512) ,
-block4_conv3 : (32, 32, 512) ,
-block4_conv4 : (32, 32, 512) ,
-block4_pool : (16, 16, 512) ,
-block5_conv1 : (16, 16, 512) ,
-block5_conv2 : (16, 16, 512) ,
-block5_conv3 : (16, 16, 512) ,
-block5_conv4 : (16, 16, 512) ,
-block5_pool : (8, 8, 512)
-}
-input_shape_dict=input_shape_dict_big
 all_genres=[_ for _ in range(-1,18)]
 all_genres_art=[_ for _ in range(0,18)] #genre -1 is photographs of weird shit
 base_flat_noise_dim=256 #the noise dim without any conditionals
