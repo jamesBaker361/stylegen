@@ -42,7 +42,7 @@ def conv_discrim(block,labels=0,wasserstein=False,gp=False):
     x=layers.LeakyReLU()(x)
     x=layers.Dropout(.2)(x)
 
-    for _ in range(3):
+    for _ in range(4):
         #x = ResNextBlock(kernel_size=(4, 4))(x)
         x= layers.Conv2D(max(x.shape[-1] //2,4),(3,3),(2,2),padding='same',kernel_constraint=constraint,kernel_initializer=w_init)(x)
         x=layers.BatchNormalization()(x)
@@ -53,7 +53,7 @@ def conv_discrim(block,labels=0,wasserstein=False,gp=False):
         #x=layers.LeakyReLU()(x)
 
     x=layers.Flatten()(x)
-    z = layers.Dense(8)(x)
+    z = x
     z=layers.BatchNormalization()(z)
     z=layers.LeakyReLU()(z)
     if wasserstein or gp:

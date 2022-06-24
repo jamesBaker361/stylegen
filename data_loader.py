@@ -52,6 +52,7 @@ def data_gen_slow_labels(blocks,flat_list,one_hot):
             artistic_style_encoding=one_hot.transform([[str(npz_object['style'])]]).toarray()[0]
             if len(features.shape)==3:
                 features=tf.expand_dims(features,0)
+            features=features/255
             if len(blocks)==1:
                 yield tuple([f for f in vgg(features)]+[artistic_style_encoding])
             else:

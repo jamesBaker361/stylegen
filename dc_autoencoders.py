@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras as tk
+import numpy as np
 from tensorflow.keras import layers,Model
 from tensorflow.keras.layers import *
 from tensorflow_addons.layers import InstanceNormalization
@@ -42,8 +43,9 @@ def dc_encoder(input_shape,latent_dim):
     return Model(inputs,x,name="encoder")
 
 
-def dc_decoder(latent_dim,filters = 32,output_strides = 16):
-    f = [2**i for i in range(5)][::-1]
+def dc_decoder(latent_dim,filters = 32,depth = 6,activation="tanh"):
+    output_strides=2**depth
+    f = [2**i for i in range(depth+1)][::-1]
     h_output = image_dim[0] // output_strides
     w_output = image_dim[1] // output_strides
 
@@ -52,9 +54,9 @@ def dc_decoder(latent_dim,filters = 32,output_strides = 16):
     x = Dense(f[0] * filters * h_output * w_output, use_bias=False)(noise)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha=0.2)(x)
-    x = Reshape((h_output, w_output, 16 * filters))(x)
+    x = Reshape((h_output, w_output, f[0] * filters))(x)
 
-    for i in range(1, 5):
+    for i in range(1, len(f)):
         x = deconv_block(x,
             num_filters=f[i] * filters,
             kernel_size=5,
@@ -62,17 +64,24 @@ def dc_decoder(latent_dim,filters = 32,output_strides = 16):
             bn=True
         )
 
-    x = conv_block(x,
-        num_filters=3,  ## Change this to 1 for grayscale.
-        kernel_size=5,
-        strides=1,
-        activation=False
+    shrink=[filters/(2**i) for i in range(1,int(np.log2(filters))-2) ]+[3]
+    for n in [3]:
+        x = conv_block(x,
+            num_filters=n,  ## Change this to 1 for grayscale.
+            kernel_size=5,
+            strides=1,
+            activation=False
     )
-    x = Activation("tanh")(x)
-    x=Rescaling(255,offset=127.5,name='img_output')(x)
+    x=Activation(activation)(x)
+    """if activation=='tanh':
+        x = Activation("tanh")(x)
+        x=Rescaling(255,offset=127.5,name='img_output')(x)
+    else:
+        x=Activation("sigmoid")(x)
+        x=Rescaling(255)"""
 
     return Model(noise, x, name="decoder")
 
 if __name__ == "__main__":
-    dec=dc_decoder(1024)
+    dec=dc_decoder(128)
     dec.summary()

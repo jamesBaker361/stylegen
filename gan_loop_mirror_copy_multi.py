@@ -9,7 +9,8 @@ print("Python version")
 print (sys.version)
 
 import argparse
-import cv2
+from tensorflow.keras.layers import *
+from tensorflow.keras import Model
 from helpers import get_checkpoint_paths
 from string_globals import *
 from other_globals import *
@@ -129,6 +130,9 @@ if __name__=='__main__':
     parser.add_argument('--{}'.format("styles"),nargs="+",default=all_styles)
     parser.add_argument('--{}'.format("dc"),type=bool,default=False,help="whetehr to use dcgan architecture")
     parser.add_argument('--{}'.format("base_flat_noise_dim"),type=int,default=64,help="dimensionality of flat latent space")
+    parser.add_argument("--activation",type=str,default="tanh",help="activation function for image generator")
+    parser.add_argument("--filters",type=int,default=16,help="final # of filters for generator")
+    parser.add_argument("--depth",type=int,default=4,help="layers pf deconv blocks for gen")
 
     args = parser.parse_args()
 
@@ -184,6 +188,9 @@ if __name__=='__main__':
     N_CRITIC=args.n_critic
     GP=args.gp
     LAMBDA_GP=args.lambda_gp
+    FILTERS=args.filters
+    DEPTH=args.depth
+    ACTIVATION=args.activation
 
     if GAMMA!=0:
         CONDITIONAL=True
@@ -365,13 +372,13 @@ if __name__=='__main__':
             flat_latent_dim=args.base_flat_noise_dim
         if CONDITIONAL == True and args.dc==False:
             flat_latent_dim+=len(art_styles)
-            autoenc=aegen(BLOCK,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM)
+            autoenc=aegen(BLOCK,FILTERS,DEPTH,ACTIVATION,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM)
         elif args.dc and CONDITIONAL==False:
-            autoenc=aegen(BLOCK,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM,dc_enc=True,dc_dec=True)
+            autoenc=aegen(BLOCK,FILTERS,DEPTH,ACTIVATION,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM,dc_enc=True,dc_dec=True)
         elif args.dc and CONDITIONAL:
-            autoenc=aegen(BLOCK,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM,dc_enc=True,dc_dec=True)
+            autoenc=aegen(BLOCK,FILTERS,DEPTH,ACTIVATION,base_flat_noise_dim=args.base_flat_noise_dim,residual=RESIDUAL,attention=ATTENTION,art_styles=art_styles,output_blocks=[BLOCK],norm=NORM,dc_enc=True,dc_dec=True)
         else:
-            autoenc=aegen(BLOCK,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
+            autoenc=aegen(BLOCK,FILTERS,DEPTH,ACTIVATION,residual=RESIDUAL,attention=ATTENTION,output_blocks=[BLOCK],norm=NORM)
         gen=extract_generator(autoenc,BLOCK,OUTPUT_BLOCKS)
         discs=[conv_discrim(b,len(art_styles),wasserstein=WASSERSTEIN,gp=GP) for b in OUTPUT_BLOCKS]
         truth_value=tf.concat([d.output[0] for d in discs],-1)
@@ -622,8 +629,18 @@ if __name__=='__main__':
                             disc.save_weights(save_dir+'cp.ckpt')
         print('training')
         #the intermediate model is used to generate the images
-        intermediate_model=gen.get_layer('decoder')
-        interm_noise_dim=intermediate_model.input.shape
+        unscaled_intermediate_model=gen.get_layer('decoder')
+        interm_noise_dim=unscaled_intermediate_model.input.shape
+        if interm_noise_dim[0]==None:
+            interm_noise_dim=interm_noise_dim[1:]
+        interm_inputs=Input(interm_noise_dim)
+        x=unscaled_intermediate_model(interm_inputs)
+        if ACTIVATION=="sigmoid":
+            x=Rescaling(255)
+        elif ACTIVATION=="tanh":
+            x=Rescaling(255,offset=127.5,name='img_output')(x)
+
+        intermediate_model=Model(interm_inputs,x)
         if interm_noise_dim[0]==None:
             interm_noise_dim=interm_noise_dim[1:]
         print('interm_noise_dim ',interm_noise_dim)

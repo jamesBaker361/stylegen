@@ -83,7 +83,7 @@ def get_encoder(inputs,input_dim,residual, attention=False,
         x=layers.Dense(base_flat_noise_dim)(x)
     return x
 
-def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance"):
+def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance",activation="sigmoid"):
     normalization=InstanceNormalization
     if norm == "batch":
         normalization=BatchNormalization
@@ -125,11 +125,11 @@ def make_decoder(input_dim,residual,attention,flat_latent_dim=0,norm="instance")
     x = GroupNormalization(groups=x.shape[-1] // 4)(x)
     x = tk.activations.swish(x)
     x = layers.Conv2D(3, (1, 1), (1, 1),padding='same')(x)
-    x=layers.Activation('sigmoid')(x)
-    x=Rescaling(255,name='img_output')(x)
+    x=layers.Activation(activation)(x)
+    #x=Rescaling(255,name='img_output')(x)
     return tk.Model(inputs=inputs,outputs=x,name='decoder')
 
-def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0,dc_enc=False,dc_dec=False):
+def aegen(block,filters,depth,activation,base_flat_noise_dim=0,residual=True,attention=True,output_blocks=[],art_styles=[],norm="instance",noise_weight=1.0,dc_enc=False,dc_dec=False):
     input_shape=input_shape_dict[block]
     inputs = tk.Input(shape=input_shape)
     flat_latent_dim=base_flat_noise_dim+len(art_styles)
@@ -146,11 +146,10 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
         class_inputs=tk.Input(shape=(len(art_styles)))
         x=tf.concat([x,class_inputs],axis=-1)
     if dc_dec:
-        dec=dc_decoder(flat_latent_dim)
+        dec=dc_decoder(flat_latent_dim,filters=filters,depth=depth,activation=activation)
     else:
-        dec=make_decoder(x.shape[1:],residual,attention,flat_latent_dim,norm=norm)
+        dec=make_decoder(x.shape[1:],residual,attention,flat_latent_dim,norm=norm,activation=activation)
     x=dec(x)
-    x=tk.applications.vgg19.preprocess_input(x)
     if output_blocks==[]:
         output_blocks.append(block)
     vgg=vgg_layers(output_blocks)
@@ -160,7 +159,7 @@ def aegen(block,base_flat_noise_dim=0,residual=True,attention=True,output_blocks
     return Model(inputs, outputs=x,name='aegen')
 
 def extract_generator(model,block,output_blocks):
-    '''It takes the decoder part of the autoencoder, and adds the VGG19 layers to it
+    '''It takes the decoder part of the autoencoder, and adds the VGG19 layers to it [DEPR]
     
     Parameters
     ----------
@@ -179,7 +178,6 @@ def extract_generator(model,block,output_blocks):
     decoder=model.get_layer('decoder')
     inputs=tk.Input(shape=decoder.input_shape[1:])
     x=decoder(inputs)
-    x=tk.applications.vgg19.preprocess_input(x)
     if output_blocks==[]:
         output_blocks.append(block)
     vgg=vgg_layers(output_blocks)
