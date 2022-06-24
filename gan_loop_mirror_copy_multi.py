@@ -275,7 +275,7 @@ if __name__=='__main__':
 
         def discriminator_loss_single(output,label_number):
             vector=tf.ones_like(output) #+tf.random.normal(shape=tf.shape(output),mean=0,stddev=.1)
-            vector +=tf.random.normal(shape=tf.shape(vector),mean=0,stddev=.1)
+            vector +=tf.random.normal(shape=tf.shape(vector),mean=0,stddev=.00001)
             vector=label_number* vector
             loss=cross_entropy(vector,output)
             return tf.nn.compute_average_loss(loss, global_batch_size=GLOBAL_BATCH_SIZE)
@@ -451,8 +451,8 @@ if __name__=='__main__':
             
                 
             if WASSERSTEIN or GP:
-                disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
-                disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.01))
+                disc_loss_real=wasserstein_loss(real_output,tf.ones_like(real_output)+tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.00001))
+                disc_loss_fake=wasserstein_loss(fake_output,-tf.ones_like(real_output)-tf.random.normal(shape=tf.shape(real_output),mean=0,stddev=.00001))
             else:
                 disc_loss_real = discriminator_loss_single(real_output,1)
                 disc_loss_fake =discriminator_loss_single(fake_output,0)

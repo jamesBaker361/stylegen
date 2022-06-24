@@ -5,6 +5,7 @@ from tensorflow.keras import layers
 from group_norm import GroupNormalization
 from resnext import ResNextBlock
 from keras.constraints import Constraint
+from numpy import log2
 
 from dc_components import *
 from generator import *
@@ -26,26 +27,23 @@ class ClipConstraint(Constraint):
 		return {'clip_value': self.clip_value}
 
 
-def conv_discrim(block,labels=0,wasserstein=False,gp=False):
+def conv_discrim(block,labels=0,wasserstein=False,gp=False,max_channels=1024):
     input_shape=input_shape_dict[block]
     inputs=layers.Input(shape=input_shape)
 
-    conv1_dim=max(128, input_shape[-1] //2)
+    length=input_shape[-2]
+    depth=int(log2(length))-1
 
     if wasserstein:
         constraint=ClipConstraint(0.01)
     else:
         constraint=Constraint()
 
-    x= layers.Conv2D(conv1_dim,(3,3),(2,2),padding='same',kernel_constraint=constraint,kernel_initializer=w_init)(inputs)
-    x=layers.BatchNormalization()(x)
-    x=layers.LeakyReLU()(x)
-    x=layers.Dropout(.2)(x)
-
-    for _ in range(4):
+    x=inputs
+    for _ in range(depth):
         #x = ResNextBlock(kernel_size=(4, 4))(x)
-        x= layers.Conv2D(max(x.shape[-1] //2,4),(3,3),(2,2),padding='same',kernel_constraint=constraint,kernel_initializer=w_init)(x)
-        x=layers.BatchNormalization()(x)
+        x= layers.Conv2D(min(x.shape[-1] *2,max_channels),(5,5),(2,2),padding='same',kernel_constraint=constraint,kernel_initializer=w_init)(x)
+        #x=layers.BatchNormalization()(x)
         x=layers.LeakyReLU()(x)
         x=layers.Dropout(.2)(x)
         #x = ResNextBlock(kernel_size=(4, 4))(x)
@@ -54,7 +52,7 @@ def conv_discrim(block,labels=0,wasserstein=False,gp=False):
 
     x=layers.Flatten()(x)
     z = x
-    z=layers.BatchNormalization()(z)
+    #z=layers.BatchNormalization()(z)
     z=layers.LeakyReLU()(z)
     if wasserstein or gp:
         z=layers.Dense(1,activation="linear")(z)
