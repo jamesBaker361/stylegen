@@ -636,7 +636,7 @@ if __name__=='__main__':
         interm_inputs=Input(interm_noise_dim)
         x=unscaled_intermediate_model(interm_inputs)
         if ACTIVATION=="sigmoid":
-            x=Rescaling(255)
+            x=Rescaling(255)(x)
         elif ACTIVATION=="tanh":
             x=Rescaling(255,offset=127.5,name='img_output')(x)
 
