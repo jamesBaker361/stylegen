@@ -10,6 +10,19 @@ input_shape_dict={l.name:l.input_shape[1:] for l in vgg.layers}
 input_shape_dict[no_block]=image_dim
 input_shape_dict[no_block_raw]=image_dim
 
+input_shape_dict_big={}
+
+for dim in [64,128,256]:
+    image_dim=(dim,dim,3)
+    vgg = VGG19(include_top=False, weights='imagenet',input_shape=image_dim)
+    input_shape_dict={l.name:l.input_shape[1:] for l in vgg.layers}
+    input_shape_dict[no_block]=image_dim
+    input_shape_dict[no_block_raw]=image_dim
+
+    input_shape_dict_big[dim]=input_shape_dict
+
+
+
 all_genres=[_ for _ in range(-1,18)]
 all_genres_art=[_ for _ in range(0,18)] #genre -1 is photographs of weird shit
 base_flat_noise_dim=256 #the noise dim without any conditionals

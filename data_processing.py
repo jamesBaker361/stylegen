@@ -144,30 +144,32 @@ def main(blocks):
             print('{}/{}'.format(c,count))
             c+=1
             img_path='{}/{}/{}'.format(img_dir,style,i)
-            try:
-                img=load_img(img_path)
-            except (AttributeError, ValueError):
-                print(img_path)
-                continue
-            img_tensor=tf.constant(img)
-            img_tensor=tf.reshape(img_tensor,(1, *img_tensor.shape))
-            #img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
-            style_outputs = style_extractor(img_tensor)
-            for layer,output in zip(style_layers,style_outputs):
-                out_dir='{}/{}/{}'.format(npz_root,layer,style)
-                if not os.path.exists(out_dir):
-                    os.makedirs(out_dir)
-                path='./{}/{}'.format(out_dir,i)
-                if os.path.exists(path) == False:
-                    proper_shape=input_shape_dict[layer]
-                    print(layer,output.shape,proper_shape)
-                    if output.shape==proper_shape or (output.shape[1:]==proper_shape):
-                        np.savez(path,layer=layer,style=style,features=output)
-                        print('saved ',path)
+            for dim in [256,128,64]:
+                style_extractor = vgg_layers(style_layers,(dim,dim,3))
+                try:
+                    img=load_img(img_path,dim)
+                except (AttributeError, ValueError):
+                    print(img_path)
+                    continue
+                img_tensor=tf.constant(img)
+                img_tensor=tf.reshape(img_tensor,(1, *img_tensor.shape))
+                #img_tensor=tf.keras.applications.vgg19.preprocess_input(img_tensor)
+                style_outputs = style_extractor(img_tensor)
+                for layer,output in zip(style_layers,style_outputs):
+                    out_dir='{}/{}/{}'.format(npz_root,layer,style)
+                    if not os.path.exists(out_dir):
+                        os.makedirs(out_dir)
+                    path='./{}/{}.{}.npz'.format(out_dir,i,dim)
+                    if os.path.exists(path) == False:
+                        proper_shape=input_shape_dict[dim][layer]
+                        print(layer,output.shape,proper_shape)
+                        if output.shape==proper_shape or (output.shape[1:]==proper_shape):
+                            np.savez(path,layer=layer,style=style,features=output)
+                            print('saved ',path)
+                        else:
+                            print('output.shape!=proper_shape',path)
                     else:
-                        print('output.shape!=proper_shape',path)
-                else:
-                    print('exists ',path)
+                        print('exists ',path)
             
 
 if __name__ == '__main__':

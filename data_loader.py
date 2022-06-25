@@ -10,7 +10,7 @@ from data_processing import vgg_layers
 from sklearn.preprocessing import OneHotEncoder
 
 
-def get_all_img_paths(block,styles): #gets all image path of images of style/genre (default)
+def get_all_img_paths(block,styles,dim=256): #gets all image path of images of style/genre (default)
     '''It takes a block and a list of styles and returns a list of all the image paths in that block and
     style
     
@@ -28,7 +28,7 @@ def get_all_img_paths(block,styles): #gets all image path of images of style/gen
     '''
     ret=[]
     for s in styles:
-        ret+=[os.path.join(npz_root,block,s,f) for f  in os.listdir(os.path.join(npz_root,block,s)) if f.endswith("npz")]
+        ret+=[os.path.join(npz_root,block,s,f) for f  in os.listdir(os.path.join(npz_root,block,s)) if f.endswith("{}.npz".format(dim))]
     return ret
 
 def data_gen_slow_labels(blocks,flat_list,one_hot):
@@ -60,7 +60,7 @@ def data_gen_slow_labels(blocks,flat_list,one_hot):
     return _data_gen_slow_labels
 
 
-def get_dataset_gen_slow_labels(blocks,batch_size, one_hot,limit=5000,styles=all_styles,genres=all_genres_art):
+def get_dataset_gen_slow_labels(blocks,batch_size, dim, one_hot,limit=5000,styles=all_styles,genres=all_genres_art):
     '''makes batched dataset from generator that also provides label encoding
 
     Arguments
@@ -77,13 +77,13 @@ def get_dataset_gen_slow_labels(blocks,batch_size, one_hot,limit=5000,styles=all
 
     dataset -- tf.data.Dataset.
     '''
-    flat_list=get_all_img_paths(no_block_raw,styles) #no_block
+    flat_list=get_all_img_paths(no_block_raw,styles,dim) #no_block
     random.shuffle(flat_list)
     flat_list=flat_list[:limit]
     flat_list=flat_list[:batch_size*(len(flat_list)//batch_size)]
     print('images in dataset = {}'.format(len(flat_list)))
     gen=data_gen_slow_labels(blocks,flat_list,one_hot)
-    output_sig_shapes=tuple([tf.TensorSpec(shape=input_shape_dict[block]) for block in blocks]+[tf.TensorSpec(shape=(len(styles)))])
+    output_sig_shapes=tuple([tf.TensorSpec(shape=input_shape_dict[dim][block]) for block in blocks]+[tf.TensorSpec(shape=(len(styles)))])
     return tf.data.Dataset.from_generator(gen,output_signature=output_sig_shapes).batch(batch_size,drop_remainder=True)
 
 def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real dataset to compare to generated images for FID
@@ -118,9 +118,6 @@ def get_real_imgs_fid(block,styles,limit=1000): #gets real images to use as real
     return tf.stack(all_features)
 
 if __name__=='__main__':
-    print('balls')
-    
-    styles=["079_teana_lanster","197_illyasviel_von_einzbern"]
     one_hot=OneHotEncoder()
     one_hot.fit([[s] for s in all_styles])
     dataset=get_dataset_gen_slow_labels([no_block_raw],3,one_hot,limit=10)
